@@ -36,7 +36,7 @@ export class StrudelCover {
       });
       
       await dazzle.start();
-      const pattern = await dazzle.generatePattern(songPath, artistName, songName);
+      await dazzle.generatePattern(songPath, artistName, songName);
       
       // Handle cleanup on exit
       process.on('SIGINT', async () => {

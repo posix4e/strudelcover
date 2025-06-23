@@ -6,7 +6,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { config } from 'dotenv';
 import { existsSync } from 'fs';
-import { join, resolve } from 'path';
+import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -31,7 +31,7 @@ program
   .version('0.1.0');
 
 // Default cover generation command
-const coverCommand = program
+program
   .command('cover <audioFile> <artist> <song>', { isDefault: true })
   .description('Generate a Strudel cover of a song using Claude AI')
   .option('-k, --api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
@@ -71,7 +71,7 @@ const coverCommand = program
       const coverGenerationOptions = {
         recordOutput: options.recordOutput
       };
-      const results = await cover.cover(audioFile, artist, song, coverGenerationOptions);
+      await cover.cover(audioFile, artist, song, coverGenerationOptions);
       
       // Keep the process running
       console.log(chalk.cyan('\n📊 Dashboard is running. Press Ctrl+C to exit.\n'));
