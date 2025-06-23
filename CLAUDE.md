@@ -1,5 +1,17 @@
 # StrudelCover - Development Guide
 
+## Installation
+
+When setting up StrudelCover in a new directory:
+
+```bash
+git clone git@github.com:posix4e/strudelcover.git
+cd strudelcover
+npm install
+npx playwright install chromium
+echo "ANTHROPIC_API_KEY=your-key" > .env
+```
+
 ## Overview
 
 StrudelCover generates musical patterns using Claude AI and plays them through Strudel.cc. It consists of:
@@ -22,12 +34,24 @@ Uses Playwright to:
 ### WebSocket Communication
 Real-time updates between server and dashboard for pattern delivery and status updates.
 
+## Running StrudelCover
+
+```bash
+# Basic usage
+touch song.mp3  # Create dummy audio file
+npm run cover song.mp3 "Pink Floyd" "Wish You Were Here"
+
+# With recording
+npm run cover song.mp3 "Artist" "Song" -- --record-output video.webm
+```
+
 ## Testing
 
 Always run tests and lint before committing:
 ```bash
-npm test
-npm run lint
+npm test        # Run all tests
+npm run lint    # Check code style
+npm run test:smoke  # Quick validation
 ```
 
 ## Important Notes
@@ -36,3 +60,20 @@ npm run lint
 - Dashboard runs on http://localhost:8888
 - Video recording captures visuals only, not audio
 - Ensure ANTHROPIC_API_KEY is set in environment
+- Audio file parameter is required but not actually used (patterns are generated from artist/song names)
+
+## Project Structure
+
+```
+├── src/
+│   ├── cli.js              # CLI entry point
+│   ├── index.js            # Main StrudelCover class
+│   ├── dazzle.js           # Dashboard and pattern generation
+│   └── templates/          # HTML and prompt templates
+├── test/
+│   ├── unit/               # Unit tests
+│   ├── integration/        # Integration tests
+│   ├── e2e/                # End-to-end tests
+│   └── helpers/            # Test utilities
+└── package.json
+```
