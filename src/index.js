@@ -1,5 +1,4 @@
-import { LLMProviderFactory } from './llm/index.js';
-import { SimpleDazzle } from './dazzle.js';
+import { Dazzle } from './dazzle.js';
 import { existsSync, mkdirSync } from 'fs';
 import chalk from 'chalk';
 
@@ -10,6 +9,7 @@ export class StrudelCover {
   constructor(options = {}) {
     this.options = options;
     this.outputDir = options.outputDir || './strudelcover-output';
+    this.apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
     
     // Create output directory
     if (!existsSync(this.outputDir)) {
@@ -17,60 +17,21 @@ export class StrudelCover {
     }
   }
 
-  /**
-   * Initialize LLM provider
-   */
-  async initializeLLM() {
-    if (this.llmProvider) return; // Already initialized
-    
-    let llmProvider;
-    
-    // Legacy support - if openaiKey provided, use OpenAI
-    if (this.options.openaiKey) {
-      llmProvider = await LLMProviderFactory.create('openai', { 
-        apiKey: this.options.openaiKey,
-        model: this.options.model 
-      });
-    } 
-    // New way - explicit provider configuration
-    else if (this.options.llm) {
-      if (typeof this.options.llm === 'string') {
-        // Simple provider name, must have API key in env or config
-        const envKey = `${this.options.llm.toUpperCase()}_API_KEY`;
-        const apiKey = this.options.llmConfig?.apiKey || process.env[envKey];
-        
-        if (!apiKey && this.options.llm !== 'ollama') {
-          throw new Error(`${this.options.llm} requires API key via llmConfig.apiKey or ${envKey} env var`);
-        }
-        
-        llmProvider = await LLMProviderFactory.create(this.options.llm, {
-          apiKey,
-          ...this.options.llmConfig
-        });
-      } else {
-        // Direct provider instance
-        llmProvider = this.options.llm;
-      }
-    } else {
-      throw new Error('LLM configuration required. Use options.openaiKey (legacy) or options.llm');
-    }
-    
-    this.llmProvider = llmProvider;
-  }
 
   /**
    * Main cover generation function
    */
   async cover(songPath, artistName, songName, options = {}) {
-    // Initialize LLM provider if not already done
-    await this.initializeLLM();
+    if (!this.apiKey) {
+      throw new Error('Anthropic API key required');
+    }
     
     console.log(chalk.blue(`\n🎵 StrudelCover: "${songName}" by ${artistName}\n`));
     
     try {
-      // Use simplified dazzle mode
-      const dazzle = new SimpleDazzle({
-        llmProvider: this.llmProvider,
+      // Create dazzle instance
+      const dazzle = new Dazzle({
+        apiKey: this.apiKey,
         recordOutput: options.recordOutput
       });
       
@@ -97,6 +58,5 @@ export class StrudelCover {
 }
 
 // Export everything
-export { LLMProviderFactory, BaseLLMProvider } from './llm/index.js';
-export { SimpleDazzle, dazzle } from './dazzle.js';
+export { Dazzle, dazzle } from './dazzle.js';
 export default StrudelCover;

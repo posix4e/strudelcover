@@ -2,9 +2,9 @@ import chalk from 'chalk';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { chromium } from 'playwright';
-import { LLMProviderFactory } from './llm/index.js';
+import Anthropic from '@anthropic-ai/sdk';
 import { promises as fs } from 'fs';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -13,9 +13,11 @@ const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export class SimpleDazzle {
+export class Dazzle {
   constructor(options = {}) {
-    this.llmProvider = options.llmProvider;
+    this.anthropic = new Anthropic({
+      apiKey: options.apiKey || process.env.ANTHROPIC_API_KEY
+    });
     this.port = options.port || 8888;
     this.server = null;
     this.wss = null;
@@ -30,11 +32,6 @@ export class SimpleDazzle {
   }
 
   async start() {
-    // Initialize LLM if needed
-    if (!this.llmProvider) {
-      throw new Error('LLM provider required');
-    }
-
     // Create recordings directory if needed
     if (this.recordOutput) {
       await fs.mkdir('./recordings', { recursive: true });
@@ -49,10 +46,10 @@ export class SimpleDazzle {
 
   async startServer() {
     return new Promise((resolve) => {
-      this.server = createServer((req, res) => {
+      this.server = createServer(async (req, res) => {
         if (req.url === '/') {
           res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(this.getHTML());
+          res.end(await this.getHTML());
         }
       });
 
@@ -118,96 +115,37 @@ export class SimpleDazzle {
   async generatePattern(audioFile, artist, song) {
     console.log(chalk.blue(`\n🎵 Generating pattern for "${song}" by ${artist}\n`));
 
-    // Enhanced prompt with musical context
-    const debugSimplePrompt = false; // Set to true for debugging
-    const prompt = debugSimplePrompt ? 
-      `Create a simple Strudel pattern for "${song}" by ${artist}". Just a basic beat. Return only code.` :
-      `Create a complete, professional Strudel pattern for "${song}" by ${artist}".
+    // Load prompt template
+    const promptTemplate = await fs.readFile(
+      join(__dirname, 'templates', 'pattern-prompt.txt'), 
+      'utf-8'
+    );
+    
+    // Replace placeholders
+    const prompt = promptTemplate
+      .replace(/{{song}}/g, song)
+      .replace(/{{artist}}/g, artist);
 
-SONG STRUCTURE AND ARRANGEMENT:
-- Analyze the original song's structure (intro, verse, chorus, bridge, outro)
-- Include ALL sections with appropriate transitions
-- Each section should have distinct characteristics
-- Use proper song dynamics (quiet verses, energetic choruses, etc.)
-
-MUSICAL ELEMENTS TO INCLUDE:
-1. DRUMS: Full drum kit patterns (kick, snare, hihat, crash, ride, toms)
-   - Vary patterns between sections
-   - Include fills at transitions
-   - Use velocity/gain for dynamics
-
-2. BASS: Melodic basslines that follow the chord progression
-   - Use note() with actual notes, not just "bass" sound
-   - Include rhythmic variations
-
-3. HARMONY: Full chord progressions
-   - Use voicings() or chord() for rich harmonies
-   - Include chord inversions where appropriate
-   - Add pad/synth layers for atmosphere
-
-4. MELODY: Main melodic elements
-   - Lead synth or instrument for main melody
-   - Counter-melodies and harmonies
-   - Solo sections if applicable
-
-5. PERCUSSION & FX: Additional elements
-   - Shakers, tambourines, claps
-   - Sweeps, risers for transitions
-   - Ambient textures
-
-TECHNICAL REQUIREMENTS:
-- Use setcps() to set the correct tempo
-- Structure: Use cat() to sequence sections properly
-- Layer with stack() within each section
-- Use .gain() for mixing levels
-- Include .pan() for stereo width
-- Add .room() or .delay() for space
-- Use .cutoff() and .resonance() for filter sweeps
-- Apply .shape() or .distort() for character
-- Length: Aim for 100-200 lines for a complete song
-
-FORMAT:
-// Song: ${song} by ${artist}
-// Tempo: [actual BPM]
-// Key: [actual key]
-// Structure: [list sections]
-
-setcps([tempo]/60/4)
-
-// [Section name]
-let sectionName = stack(
-  // drums
-  // bass
-  // chords
-  // melody
-  // fx
-)
-
-// Arrangement
-cat(
-  sectionName.slow(16), // intro
-  // ... rest of arrangement
-)
-
-Return ONLY the Strudel code, no other text.`;
-
-    console.log(chalk.yellow('🤖 Asking LLM to generate pattern...'));
+    console.log(chalk.yellow('🤖 Asking Claude to generate pattern...'));
     console.log(chalk.gray(`Prompt length: ${prompt.length} characters`));
     
     const startTime = Date.now();
     try {
-      const response = await this.llmProvider.generateCompletion([
-        { role: 'user', content: prompt }
-      ]);
+      const response = await this.anthropic.messages.create({
+        model: 'claude-3-opus-20240229',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }]
+      });
+      
       const endTime = Date.now();
-      console.log(chalk.gray(`LLM response time: ${(endTime - startTime) / 1000}s`));
+      console.log(chalk.gray(`Claude response time: ${(endTime - startTime) / 1000}s`));
 
       // Extract code from response
-      this.pattern = this.extractCode(response);
+      this.pattern = this.extractCode(response.content[0].text);
     } catch (error) {
-      console.error(chalk.red('LLM Error:'), error.message);
+      console.error(chalk.red('Claude Error:'), error.message);
       // Fallback to a simple pattern
-      console.log(chalk.yellow('Falling back to simple pattern...'));
+      console.log(chalk.yellow('Falling back to fallback pattern...'));
       this.pattern = this.getFallbackPattern(song, artist);
     }
     
@@ -385,240 +323,17 @@ stack(
     }
   }
 
-  getHTML() {
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Dazzle</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 20px;
-      background: #0a0a0a;
-      color: #0ff;
-      font-family: monospace;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
+  async getHTML() {
+    // Load HTML template
+    const htmlTemplate = await fs.readFile(
+      join(__dirname, 'templates', 'dashboard.html'), 
+      'utf-8'
+    );
     
-    h1 {
-      margin: 0 0 10px 0;
-      text-align: center;
-    }
-    
-    #controls {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 10px;
-      justify-content: center;
-    }
-    
-    button {
-      background: #0ff;
-      color: #000;
-      border: none;
-      padding: 8px 16px;
-      cursor: pointer;
-      font-family: monospace;
-      font-weight: bold;
-      transition: all 0.2s;
-    }
-    
-    button:hover {
-      background: #fff;
-      box-shadow: 0 0 10px #0ff;
-    }
-    
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    
-    #status {
-      margin-bottom: 10px;
-      padding: 10px;
-      border: 1px solid #0ff;
-      background: rgba(0,255,255,0.1);
-      text-align: center;
-    }
-    
-    #visualizer {
-      height: 100px;
-      margin-bottom: 10px;
-      border: 1px solid #0ff;
-      background: rgba(0,255,255,0.05);
-      position: relative;
-      overflow: hidden;
-    }
-    
-    canvas {
-      width: 100%;
-      height: 100%;
-    }
-    
-    #strudel-container {
-      flex: 1;
-      border: 2px solid #0ff;
-      background: #000;
-    }
-    
-    iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-    
-    .recording {
-      animation: pulse 1s infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-  </style>
-</head>
-<body>
-  <h1>🌟 DAZZLE</h1>
-  <div id="controls">
-    <button id="recordBtn" disabled>Start Recording</button>
-    <button id="downloadBtn" disabled>Download Recording</button>
-  </div>
-  <div id="status">Waiting for pattern...</div>
-  <div id="visualizer">
-    <canvas id="canvas"></canvas>
-  </div>
-  <div id="strudel-container">
-    <iframe id="strudel" src="https://strudel.cc"></iframe>
-  </div>
-  
-  <script>
-    const ws = new WebSocket('ws://localhost:${this.port}');
-    const status = document.getElementById('status');
-    const iframe = document.getElementById('strudel');
-    const recordBtn = document.getElementById('recordBtn');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    
-    let isRecording = false;
-    let animationId = null;
-    
-    // Set canvas size
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    
-    // Audio visualization
-    function drawVisualizer() {
-      ctx.fillStyle = 'rgba(10, 10, 10, 0.2)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Draw waveform
-      ctx.strokeStyle = '#0ff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      
-      const time = Date.now() / 1000;
-      for (let x = 0; x < canvas.width; x += 2) {
-        const t = x / canvas.width;
-        const y = canvas.height / 2 + Math.sin(t * 10 + time * 5) * 30 * Math.sin(time * 2);
-        
-        if (x === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      
-      ctx.stroke();
-      
-      // Draw frequency bars
-      const barWidth = canvas.width / 64;
-      for (let i = 0; i < 64; i++) {
-        const height = Math.abs(Math.sin(i * 0.3 + time * 3)) * canvas.height * 0.8;
-        const x = i * barWidth;
-        const y = canvas.height - height;
-        
-        ctx.fillStyle = \`hsl(\${180 + i * 2}, 100%, 50%)\`;
-        ctx.fillRect(x, y, barWidth - 1, height);
-      }
-      
-      animationId = requestAnimationFrame(drawVisualizer);
-    }
-    
-    // Start visualizer
-    drawVisualizer();
-    
-    // Record button handler
-    recordBtn.addEventListener('click', () => {
-      if (!isRecording) {
-        ws.send(JSON.stringify({ type: 'startRecording' }));
-        recordBtn.textContent = 'Stop Recording';
-        recordBtn.classList.add('recording');
-        isRecording = true;
-      } else {
-        ws.send(JSON.stringify({ type: 'stopRecording' }));
-        recordBtn.textContent = 'Start Recording';
-        recordBtn.classList.remove('recording');
-        isRecording = false;
-      }
-    });
-    
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'ready' }));
-      status.textContent = 'Connected - waiting for pattern...';
-    };
-    
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      
-      if (message.type === 'pattern') {
-        status.textContent = 'Pattern received - loading in Strudel...';
-        
-        // Wait for Strudel to load
-        iframe.addEventListener('load', () => {
-          setTimeout(() => {
-            // Try to set the pattern in Strudel
-            try {
-              const strudelWindow = iframe.contentWindow;
-              if (strudelWindow && strudelWindow.setCode) {
-                strudelWindow.setCode(message.data);
-                status.textContent = 'Pattern loaded - click play to hear it!';
-              }
-            } catch (e) {
-              // Cross-origin restrictions, but pattern might still work
-              console.log('Could not directly set code:', e);
-              status.innerHTML = 'Pattern ready - paste this in Strudel:<br><pre>' + 
-                message.data.substring(0, 100) + '...</pre>';
-            }
-          }, 2000);
-        });
-      } else if (message.type === 'autoplayStarted') {
-        recordBtn.disabled = false;
-        status.textContent = 'Playing! Click record to capture the output.';
-        
-        // Auto-start recording if specified via CLI
-        if (${this.recordOutput ? 'true' : 'false'}) {
-          setTimeout(() => {
-            recordBtn.click();
-          }, 500);
-        }
-      } else if (message.type === 'recordingStarted') {
-        status.textContent = 'Recording...';
-      } else if (message.type === 'recordingStopped') {
-        status.textContent = 'Recording complete!';
-        downloadBtn.disabled = false;
-      }
-    };
-    
-    ws.onerror = () => {
-      status.textContent = 'Connection error';
-    };
-  </script>
-</body>
-</html>`;
+    // Replace placeholders
+    return htmlTemplate
+      .replace(/{{port}}/g, this.port)
+      .replace(/{{autoRecord}}/g, this.recordOutput ? 'true' : 'false');
   }
 
   async stop() {
@@ -641,17 +356,9 @@ stack(
 
 // Standalone function for easy use
 export async function dazzle(audioFile, artist, song, options = {}) {
-  // Initialize LLM provider
-  const provider = options.provider || 'anthropic';
-  const llmProvider = await LLMProviderFactory.create(
-    provider,
-    {
-      apiKey: options.apiKey || process.env[`${provider.toUpperCase()}_API_KEY`],
-      model: options.model || (provider === 'anthropic' ? 'claude-3-opus-20240229' : 'gpt-4')
-    }
-  );
-
-  const dazzler = new SimpleDazzle({ llmProvider });
+  const dazzler = new Dazzle({
+    apiKey: options.apiKey || process.env.ANTHROPIC_API_KEY
+  });
   await dazzler.start();
   
   const pattern = await dazzler.generatePattern(audioFile, artist, song);

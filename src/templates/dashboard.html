@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dazzle</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #0a0a0a;
+      color: #0ff;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    
+    h1 {
+      margin: 0 0 10px 0;
+      text-align: center;
+    }
+    
+    #controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      justify-content: center;
+    }
+    
+    button {
+      background: #0ff;
+      color: #000;
+      border: none;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-family: monospace;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+    
+    button:hover {
+      background: #fff;
+      box-shadow: 0 0 10px #0ff;
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    #status {
+      margin-bottom: 10px;
+      padding: 10px;
+      border: 1px solid #0ff;
+      background: rgba(0,255,255,0.1);
+      text-align: center;
+    }
+    
+    #visualizer {
+      height: 100px;
+      margin-bottom: 10px;
+      border: 1px solid #0ff;
+      background: rgba(0,255,255,0.05);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+    
+    #strudel-container {
+      flex: 1;
+      border: 2px solid #0ff;
+      background: #000;
+    }
+    
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    
+    .recording {
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <h1>🌟 DAZZLE</h1>
+  <div id="controls">
+    <button id="recordBtn" disabled>Start Recording</button>
+    <button id="downloadBtn" disabled>Download Recording</button>
+  </div>
+  <div id="status">Waiting for pattern...</div>
+  <div id="visualizer">
+    <canvas id="canvas"></canvas>
+  </div>
+  <div id="strudel-container">
+    <iframe id="strudel" src="https://strudel.cc"></iframe>
+  </div>
+  
+  <script>
+    const ws = new WebSocket('ws://localhost:{{port}}');
+    const status = document.getElementById('status');
+    const iframe = document.getElementById('strudel');
+    const recordBtn = document.getElementById('recordBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    let isRecording = false;
+    let animationId = null;
+    
+    // Set canvas size
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    
+    // Audio visualization
+    function drawVisualizer() {
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.2)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw waveform
+      ctx.strokeStyle = '#0ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      
+      const time = Date.now() / 1000;
+      for (let x = 0; x < canvas.width; x += 2) {
+        const t = x / canvas.width;
+        const y = canvas.height / 2 + Math.sin(t * 10 + time * 5) * 30 * Math.sin(time * 2);
+        
+        if (x === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      
+      ctx.stroke();
+      
+      // Draw frequency bars
+      const barWidth = canvas.width / 64;
+      for (let i = 0; i < 64; i++) {
+        const height = Math.abs(Math.sin(i * 0.3 + time * 3)) * canvas.height * 0.8;
+        const x = i * barWidth;
+        const y = canvas.height - height;
+        
+        ctx.fillStyle = `hsl(${180 + i * 2}, 100%, 50%)`;
+        ctx.fillRect(x, y, barWidth - 1, height);
+      }
+      
+      animationId = requestAnimationFrame(drawVisualizer);
+    }
+    
+    // Start visualizer
+    drawVisualizer();
+    
+    // Record button handler
+    recordBtn.addEventListener('click', () => {
+      if (!isRecording) {
+        ws.send(JSON.stringify({ type: 'startRecording' }));
+        recordBtn.textContent = 'Stop Recording';
+        recordBtn.classList.add('recording');
+        isRecording = true;
+      } else {
+        ws.send(JSON.stringify({ type: 'stopRecording' }));
+        recordBtn.textContent = 'Start Recording';
+        recordBtn.classList.remove('recording');
+        isRecording = false;
+      }
+    });
+    
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'ready' }));
+      status.textContent = 'Connected - waiting for pattern...';
+    };
+    
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      
+      if (message.type === 'pattern') {
+        status.textContent = 'Pattern received - loading in Strudel...';
+        
+        // Wait for Strudel to load
+        iframe.addEventListener('load', () => {
+          setTimeout(() => {
+            // Try to set the pattern in Strudel
+            try {
+              const strudelWindow = iframe.contentWindow;
+              if (strudelWindow && strudelWindow.setCode) {
+                strudelWindow.setCode(message.data);
+                status.textContent = 'Pattern loaded - click play to hear it!';
+              }
+            } catch (e) {
+              // Cross-origin restrictions, but pattern might still work
+              console.log('Could not directly set code:', e);
+              status.innerHTML = 'Pattern ready - paste this in Strudel:<br><pre>' + 
+                message.data.substring(0, 100) + '...</pre>';
+            }
+          }, 2000);
+        });
+      } else if (message.type === 'autoplayStarted') {
+        recordBtn.disabled = false;
+        status.textContent = 'Playing! Click record to capture the output.';
+        
+        // Auto-start recording if specified via CLI
+        if ({{autoRecord}}) {
+          setTimeout(() => {
+            recordBtn.click();
+          }, 500);
+        }
+      } else if (message.type === 'recordingStarted') {
+        status.textContent = 'Recording...';
+      } else if (message.type === 'recordingStopped') {
+        status.textContent = 'Recording complete!';
+        downloadBtn.disabled = false;
+      }
+    };
+    
+    ws.onerror = () => {
+      status.textContent = 'Connection error';
+    };
+  </script>
+</body>
+</html>

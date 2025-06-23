@@ -1,71 +1,40 @@
-# StrudelCover - Minimal Dazzle Mode
+# StrudelCover
 
-A minimal implementation of StrudelCover with only Dazzle mode functionality.
+AI-powered music pattern generator using Strudel.cc
 
-## What is Dazzle Mode?
-
-Dazzle mode provides a real-time dashboard for watching AI-powered pattern generation. It builds songs progressively, layer by layer, with full visibility into the LLM conversation.
-
-## Features
-
-- Real-time web dashboard (http://localhost:8888)
-- In-browser audio analysis with Essentia.js
-- Progressive pattern building (drums → bass → melody → etc.)
-- LLM conversation history
-- Integrated Strudel.cc player
-- Dynamic song structure determined by AI
-- No server-side audio processing needed
-
-## Installation
+## Quick Start
 
 ```bash
 npm install
+npx playwright install chromium
+npm run cover song.mp3 "Artist" "Song Title"
 ```
 
-## Usage
+## What it does
 
-```bash
-# Basic usage
-npm run cover "Artist" "Song Title" -- --dazzle
-
-# With specific API key
-npm run cover "Artist" "Song Title" -- --dazzle --api-key YOUR_API_KEY
-
-# With different LLM provider
-npm run cover "Artist" "Song Title" -- --dazzle --llm anthropic
-
-# Then load your audio file in the dashboard at http://localhost:8888
-```
+- Generates musical patterns from song descriptions using Claude AI
+- Plays patterns in real-time through Strudel.cc
+- Shows live audio visualization
+- Optionally records the visual output
 
 ## Requirements
 
-- Node.js 18+
-- FFmpeg (for audio processing)
-- API key for OpenAI or Anthropic
+- Node.js 20+
+- Anthropic API key (set `ANTHROPIC_API_KEY` environment variable)
 
-## Environment Variables
+## Examples
 
 ```bash
-# .env file
-OPENAI_API_KEY=your-openai-key
-ANTHROPIC_API_KEY=your-anthropic-key
+# Basic usage
+npm run cover track.mp3 "Pink Floyd" "Comfortably Numb"
+
+# With video recording
+npm run cover track.mp3 "Daft Punk" "One More Time" -- --record-output video.webm
 ```
 
-## How It Works
+## Development
 
-1. Analyzes input audio for tempo, key, and features
-2. Opens dashboard at http://localhost:8888
-3. Builds patterns layer by layer with LLM
-4. Shows real-time progress and conversation
-5. Exports final combined pattern
-
-## Minimal Implementation
-
-This is a stripped-down version containing only:
-- Dazzle mode generator
-- Dashboard server
-- LLM providers (OpenAI/Anthropic)
-- Audio analysis
-- Pattern export
-
-All other modes (sparkle, complex, basic) and RAG functionality have been removed.
+```bash
+npm test     # Run tests
+npm run lint # Check code style
+```

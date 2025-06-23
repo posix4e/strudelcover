@@ -1,0 +1,68 @@
+Create a Strudel pattern for "{{song}}" by {{artist}}.
+
+SONG STRUCTURE AND ARRANGEMENT:
+- Analyze the original song's structure (intro, verse, chorus, bridge, outro)
+- Include ALL sections with appropriate transitions
+- Each section should have distinct characteristics
+- Use proper song dynamics (quiet verses, energetic choruses, etc.)
+
+MUSICAL ELEMENTS TO INCLUDE:
+1. DRUMS: Full drum kit patterns (kick, snare, hihat, crash, ride, toms)
+   - Vary patterns between sections
+   - Include fills at transitions
+   - Use velocity/gain for dynamics
+
+2. BASS: Melodic basslines that follow the chord progression
+   - Use note() with actual notes, not just "bass" sound
+   - Include rhythmic variations
+
+3. HARMONY: Full chord progressions
+   - Use voicings() or chord() for rich harmonies
+   - Include chord inversions where appropriate
+   - Add pad/synth layers for atmosphere
+
+4. MELODY: Main melodic elements
+   - Lead synth or instrument for main melody
+   - Counter-melodies and harmonies
+   - Solo sections if applicable
+
+5. PERCUSSION & FX: Additional elements
+   - Shakers, tambourines, claps
+   - Sweeps, risers for transitions
+   - Ambient textures
+
+TECHNICAL REQUIREMENTS:
+- Use setcps() to set the correct tempo
+- Structure: Use cat() to sequence sections properly
+- Layer with stack() within each section
+- Use .gain() for mixing levels
+- Include .pan() for stereo width
+- Add .room() or .delay() for space
+- Use .cutoff() and .resonance() for filter sweeps
+- Apply .shape() or .distort() for character
+- Length: Aim for 100-200 lines for a complete song
+
+FORMAT:
+// Song: {{song}} by {{artist}}
+// Tempo: [actual BPM]
+// Key: [actual key]
+// Structure: [list sections]
+
+setcps([tempo]/60/4)
+
+// [Section name]
+let sectionName = stack(
+  // drums
+  // bass
+  // chords
+  // melody
+  // fx
+)
+
+// Arrangement
+cat(
+  sectionName.slow(16), // intro
+  // ... rest of arrangement
+)
+
+Return ONLY the Strudel code, no other text.

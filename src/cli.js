@@ -30,31 +30,24 @@ program
   .description('AI-powered tool to recreate songs as Strudel patterns')
   .version('0.1.0');
 
-// Removed Spotify commands - using SoundCloud instead
-
-// Default cover generation command (Dazzle mode only)
+// Default cover generation command
 const coverCommand = program
   .command('cover <audioFile> <artist> <song>', { isDefault: true })
-  .description('Generate a Strudel cover of a song using Dazzle mode')
-  .option('-k, --api-key <key>', 'OpenAI API key (or set OPENAI_API_KEY env var)')
+  .description('Generate a Strudel cover of a song using Claude AI')
+  .option('-k, --api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
   .option('-o, --output <dir>', 'Output directory', './strudelcover-output')
-  .option('--llm <provider>', 'LLM provider: openai, anthropic, ollama', 'anthropic')
-  .option('--model <model>', 'LLM model to use')
-  .option('--llm-base-url <url>', 'Custom LLM API endpoint')
-  .option('-r, --record-output <file>', 'Output file for recording (e.g., output.wav)')
+  .option('-r, --record-output <file>', 'Output file for recording (e.g., output.webm)')
   .action(async (audioFile, artist, song, options) => {
     console.log(chalk.blue.bold('\n🎸 StrudelCover - AI Song Recreation\n'));
     
     const spinner = ora('Initializing...').start();
     
     try {
-      // Configure LLM
-      const llmProvider = options.llm || 'anthropic';
-      const envKeyName = `${llmProvider.toUpperCase()}_API_KEY`;
-      const apiKey = options.apiKey || process.env[envKeyName] || process.env.OPENAI_API_KEY;
+      // Get API key
+      const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
       
-      if (!apiKey && llmProvider !== 'ollama') {
-        spinner.fail(`${llmProvider} API key required (use --api-key or set ${envKeyName})`);
+      if (!apiKey) {
+        spinner.fail('Anthropic API key required (use --api-key or set ANTHROPIC_API_KEY)');
         process.exit(1);
       }
       
@@ -66,16 +59,10 @@ const coverCommand = program
       
       spinner.succeed('Ready to create cover!');
       
-      // Create StrudelCover instance (always dazzle mode)
+      // Create StrudelCover instance
       const coverOptions = {
-        llm: llmProvider,
-        llmConfig: {
-          apiKey,
-          model: options.model || (llmProvider === 'anthropic' ? 'claude-3-opus-20240229' : undefined),
-          baseURL: options.llmBaseUrl
-        },
-        outputDir: options.output,
-        dazzle: true // Always use dazzle mode
+        apiKey,
+        outputDir: options.output
       };
       
       const cover = new StrudelCover(coverOptions);
@@ -101,36 +88,28 @@ const coverCommand = program
 program.on('--help', () => {
   console.log('');
   console.log('Commands:');
-  console.log('  cover <input> <artist> <song>  Generate a Strudel cover using Dazzle mode');
+  console.log('  cover <input> <artist> <song>  Generate a Strudel cover using Claude AI');
   console.log('');
   console.log('Examples:');
   console.log('  # Basic usage');
   console.log('  $ strudelcover song.mp3 "The Beatles" "Hey Jude"');
   console.log('');
-  console.log('  # Using different LLM providers');
-  console.log('  $ strudelcover song.mp3 "Artist" "Song" --llm anthropic');
-  console.log('  $ strudelcover song.mp3 "Artist" "Song" --llm ollama --model llama2');
-  console.log('');
   console.log('  # Custom output directory');
   console.log('  $ strudelcover song.mp3 "Artist" "Song" --output ./my-covers');
   console.log('');
   console.log('  # Record the output');
-  console.log('  $ strudelcover song.mp3 "Artist" "Song" --record-output output.wav');
+  console.log('  $ strudelcover song.mp3 "Artist" "Song" --record-output output.webm');
   console.log('');
-  console.log('Dazzle Mode Features:');
-  console.log('  - Simple dashboard on http://localhost:8888');
-  console.log('  - Direct pattern generation using LLM');
+  console.log('Features:');
+  console.log('  - Dashboard on http://localhost:8888');
+  console.log('  - Pattern generation using Claude 3 Opus');
   console.log('  - Automatic playback with Playwright');
-  console.log('  - Embedded Strudel.cc for testing');
-  console.log('');
-  console.log('LLM Providers:');
-  console.log('  anthropic (default) - Claude 3 Opus, requires ANTHROPIC_API_KEY');
-  console.log('  openai             - GPT-4o, requires OPENAI_API_KEY');
-  console.log('  ollama            - Local models, no API key needed');
+  console.log('  - Embedded Strudel.cc player');
+  console.log('  - Audio visualization');
+  console.log('  - Video recording (visual only)');
   console.log('');
   console.log('Environment Variables:');
-  console.log('  OPENAI_API_KEY        OpenAI API key');
-  console.log('  ANTHROPIC_API_KEY     Anthropic API key');
+  console.log('  ANTHROPIC_API_KEY     Anthropic API key (required)');
 });
 
 program.parse();
