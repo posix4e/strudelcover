@@ -1,0 +1,44 @@
+{
+  "name": "@strudel/strudelcover",
+  "version": "0.1.0",
+  "description": "AI-powered tool to recreate songs as Strudel patterns through iterative audio analysis",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "strudelcover": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "cover": "node src/cli.js",
+    "test-dazzle": "node test-dazzle.js",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "chalk": "^5.0.0",
+    "commander": "^11.0.0",
+    "dotenv": "^16.0.0",
+    "node-fetch": "^3.3.0",
+    "open": "^9.0.0",
+    "openai": "^4.0.0",
+    "ora": "^7.0.0",
+    "playwright": "^1.53.1",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "@playwright/test": "^1.48.0"
+  },
+  "keywords": [
+    "strudel",
+    "audio",
+    "music",
+    "cover",
+    "ai",
+    "generation"
+  ],
+  "author": "",
+  "license": "AGPL-3.0+"
+}
