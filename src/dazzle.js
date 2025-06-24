@@ -45,7 +45,7 @@ export class Dazzle {
   }
 
   async startServer() {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       this.server = createServer(async (req, res) => {
         if (req.url === '/') {
           res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -55,7 +55,7 @@ export class Dazzle {
 
       this.wss = new WebSocketServer({ server: this.server });
       
-      this.wss.on('connection', (ws) => {
+      this.wss.on('connection', ws => {
         // Send current pattern if we have one
         if (this.pattern) {
           ws.send(JSON.stringify({
@@ -64,7 +64,7 @@ export class Dazzle {
           }));
         }
 
-        ws.on('message', (message) => {
+        ws.on('message', message => {
           const data = JSON.parse(message);
           if (data.type === 'ready') {
             console.log(chalk.green('✓ Dashboard connected'));
@@ -129,6 +129,12 @@ export class Dazzle {
     console.log(chalk.yellow('🤖 Asking Claude to generate pattern...'));
     console.log(chalk.gray(`Prompt length: ${prompt.length} characters`));
     
+    // Show the full prompt being sent
+    console.log(chalk.blue('\n📤 Sending prompt to Claude:'));
+    console.log(chalk.gray('─'.repeat(70)));
+    console.log(chalk.dim(prompt));
+    console.log(chalk.gray('─'.repeat(70)));
+    
     const startTime = Date.now();
     try {
       const response = await this.anthropic.messages.create({
@@ -138,7 +144,13 @@ export class Dazzle {
       });
       
       const endTime = Date.now();
-      console.log(chalk.gray(`Claude response time: ${(endTime - startTime) / 1000}s`));
+      console.log(chalk.gray(`\nClaude response time: ${(endTime - startTime) / 1000}s`));
+      
+      // Show the full response from Claude
+      console.log(chalk.green('\n📥 Claude\'s full response:'));
+      console.log(chalk.gray('─'.repeat(70)));
+      console.log(chalk.dim(response.content[0].text));
+      console.log(chalk.gray('─'.repeat(70)));
 
       // Extract code from response
       this.pattern = this.extractCode(response.content[0].text);
@@ -190,11 +202,11 @@ stack(
   sound("hh*8"),
   sound("sd ~ sd"),
   note("c3 eb3 g3 c4").sound("piano").slow(4)
-)`
+)`;
   }
 
   broadcast(message) {
-    if (!this.wss) return;
+    if (!this.wss) {return;}
     
     const data = JSON.stringify(message);
     this.wss.clients.forEach(client => {
@@ -205,7 +217,7 @@ stack(
   }
 
   async autoplay() {
-    if (!this.page) return;
+    if (!this.page) {return;}
     
     console.log(chalk.yellow('🎵 Attempting autoplay...'));
     
@@ -247,7 +259,7 @@ stack(
   }
   
   async startRecording() {
-    if (this.isRecording) return;
+    if (this.isRecording) {return;}
     
     console.log(chalk.red('⚪ Recording started...'));
     this.isRecording = true;
@@ -263,7 +275,7 @@ stack(
   }
   
   async stopRecording() {
-    if (!this.isRecording) return;
+    if (!this.isRecording) {return;}
     
     const duration = (Date.now() - this.recordingStartTime) / 1000;
     console.log(chalk.green(`✓ Recording stopped (${duration.toFixed(1)}s)`));
