@@ -6,7 +6,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { promises as fs } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
@@ -25,11 +25,11 @@ export class Dazzle {
     this.page = null;
     this.pattern = null;
     this.isRecording = false;
-    this.audioContext = null;
-    this.mediaRecorder = null;
-    this.recordedChunks = [];
     this.recordOutput = options.recordOutput;
     this.lastError = null;
+    this.recordProcess = null;
+    this.audioFilename = null;
+    this.recordingTimeout = null;
     this.retryCount = 0;
     this.maxRetries = 3;
     this.currentArtist = null;
@@ -37,10 +37,8 @@ export class Dazzle {
   }
 
   async start() {
-    // Create recordings directory if needed
-    if (this.recordOutput) {
-      await fs.mkdir('./recordings', { recursive: true });
-    }
+    // Create recordings directory
+    await fs.mkdir('./recordings', { recursive: true });
 
     // Start web server
     await this.startServer();
@@ -98,16 +96,8 @@ export class Dazzle {
         args: ['--autoplay-policy=no-user-gesture-required']
       });
       
-      // Set up video recording if output specified
-      const contextOptions = {};
-      if (this.recordOutput) {
-        contextOptions.recordVideo = {
-          dir: './recordings',
-          size: { width: 1280, height: 720 }
-        };
-      }
-      
-      const context = await this.browser.newContext(contextOptions);
+      // Create context without video recording
+      const context = await this.browser.newContext();
       this.page = await context.newPage();
       
       // Listen for console errors
@@ -153,6 +143,9 @@ export class Dazzle {
     // Store current artist/song for retry
     this.currentArtist = artist;
     this.currentSong = song;
+    
+    // Send song info to dashboard
+    this.broadcast({ type: 'songInfo', artist, song });
     
     // Reset retry count if this is a new request (not a retry)
     if (!errorFeedback) {
@@ -253,10 +246,11 @@ export class Dazzle {
     // Wait a bit then try autoplay
     setTimeout(() => this.autoplay(), 3000);
     
-    // If record output specified, notify user
+    // Log message about recording
     if (this.recordOutput) {
-      console.log(chalk.yellow(`\n📼 Will record to: ${this.recordOutput}`));
-      console.log(chalk.gray('Recording will start automatically after playback begins'));
+      console.log(chalk.yellow(`\n🎵 Audio will be saved to: ${this.recordOutput}`));
+    } else {
+      console.log(chalk.gray('\n🎵 To record audio, click "Start Recording" in the dashboard'));
     }
     
     return this.pattern;
@@ -264,6 +258,9 @@ export class Dazzle {
   
   async retryWithErrorFeedback() {
     this.retryCount++;
+    
+    // Send retry update to dashboard
+    this.broadcast({ type: 'retryUpdate', count: this.retryCount });
     
     // Clear the last error
     const errorToFix = this.lastError;
@@ -501,77 +498,105 @@ stack(
   async startRecording() {
     if (this.isRecording) {return;}
     
-    console.log(chalk.red('⚪ Recording started...'));
+    console.log(chalk.red('⚪ Recording audio...'));
     this.isRecording = true;
     this.recordingStartTime = Date.now();
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const safeSong = this.currentSong.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const safeArtist = this.currentArtist.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    this.audioFilename = this.recordOutput || `strudelcover_${safeArtist}_${safeSong}_${timestamp}.wav`;
+    
+    // Start audio recording using system audio capture
+    await this.startAudioCapture();
+    
     this.broadcast({ type: 'recordingStarted' });
     
-    // Auto-stop after 10 seconds for testing
-    setTimeout(() => {
+    // Auto-stop after 30 seconds (configurable)
+    this.recordingTimeout = setTimeout(() => {
       if (this.isRecording) {
+        console.log(chalk.yellow('Auto-stopping recording after 30 seconds'));
         this.stopRecording();
       }
-    }, 10000);
+    }, 30000);
   }
   
   async stopRecording() {
     if (!this.isRecording) {return;}
     
+    // Clear timeout
+    if (this.recordingTimeout) {
+      clearTimeout(this.recordingTimeout);
+    }
+    
     const duration = (Date.now() - this.recordingStartTime) / 1000;
     console.log(chalk.green(`✓ Recording stopped (${duration.toFixed(1)}s)`));
     this.isRecording = false;
-    this.broadcast({ type: 'recordingStopped' });
     
-    // Close the page to save the video
-    if (this.page) {
-      await this.page.close();
-      
-      // Wait for video to be saved
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Find the recorded video
-      try {
-        const files = await fs.readdir('./recordings');
-        const videoFile = files.find(f => f.endsWith('.webm'));
-        
-        if (videoFile) {
-          const videoPath = `./recordings/${videoFile}`;
-          console.log(chalk.blue('🎥 Converting video to audio...'));
-          
-          // Extract audio using ffmpeg
-          try {
-            // Try to find ffmpeg in common locations
-            let ffmpegPath = 'ffmpeg';
-            const possiblePaths = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'];
-            for (const path of possiblePaths) {
-              try {
-                await fs.access(path);
-                ffmpegPath = path;
-                break;
-              } catch (e) {
-                // Continue to next path
-              }
-            }
-            
-            await execAsync(`${ffmpegPath} -i "${videoPath}" -vn -acodec pcm_s16le -ar 44100 -ac 2 "${this.recordOutput}" -y`);
-            console.log(chalk.green(`💾 Audio saved to: ${this.recordOutput}`));
-            
-            // Clean up video file
-            await fs.unlink(videoPath);
-          } catch (ffmpegError) {
-            if (ffmpegError.message.includes('does not contain any stream')) {
-              console.log(chalk.yellow('Note: Playwright video recording captures visuals only, not audio.'));
-              console.log(chalk.yellow('For audio recording, consider using system audio capture tools.'));
-              console.log(chalk.gray('Video (visual only) saved at:', videoPath));
-            } else {
-              console.log(chalk.yellow('FFmpeg error:', ffmpegError.message));
-              console.log(chalk.gray('Video saved at:', videoPath));
-            }
+    // Stop audio capture
+    await this.stopAudioCapture();
+    
+    console.log(chalk.green(`💾 Audio saved to: ${this.audioFilename}`));
+    this.broadcast({ 
+      type: 'recordingStopped',
+      filename: this.audioFilename,
+      duration: duration 
+    });
+  }
+  
+  async startAudioCapture() {
+    // Use sox or rec command for cross-platform audio recording
+    // First check if sox/rec is available
+    try {
+      await execAsync('which rec');
+      // Use rec (part of sox) for recording
+      this.recordProcess = exec(
+        `rec -c 2 -r 44100 "${this.audioFilename}"`,
+        (error, stdout, stderr) => {
+          if (error && !error.killed) {
+            console.error(chalk.red('Recording error:'), error.message);
           }
         }
-      } catch (error) {
-        console.error(chalk.red('Error processing recording:'), error.message);
+      );
+      console.log(chalk.green('Audio recording started with sox/rec'));
+    } catch (e) {
+      // Fallback to platform-specific solutions
+      if (process.platform === 'darwin') {
+        // macOS: Use built-in audio recording
+        console.log(chalk.yellow('Using macOS audio recording (requires permissions)'));
+        console.log(chalk.gray('Note: For best results, install sox with: brew install sox'));
+        
+        // Simple approach using afrecord (macOS built-in)
+        this.recordProcess = exec(
+          `afrecord -f WAVE -c 2 -r 44100 "${this.audioFilename}"`,
+          (error, stdout, stderr) => {
+            if (error && !error.killed) {
+              console.error(chalk.red('Recording error:'), error.message);
+            }
+          }
+        );
+      } else {
+        console.log(chalk.yellow('Audio recording requires sox to be installed'));
+        console.log(chalk.gray('Install with:'));
+        console.log(chalk.gray('  Ubuntu/Debian: sudo apt-get install sox'));
+        console.log(chalk.gray('  macOS: brew install sox'));
+        console.log(chalk.gray('  Windows: Download from http://sox.sourceforge.net'));
+        
+        // Create a placeholder file
+        await fs.writeFile(this.audioFilename, '');
       }
+    }
+  }
+  
+  async stopAudioCapture() {
+    if (this.recordProcess) {
+      // Kill the recording process
+      this.recordProcess.kill('SIGTERM');
+      this.recordProcess = null;
+      
+      // Wait a bit for the file to be finalized
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
 
@@ -586,6 +611,10 @@ stack(
     return htmlTemplate
       .replace(/{{port}}/g, this.port)
       .replace(/{{autoRecord}}/g, this.recordOutput ? 'true' : 'false');
+  }
+  
+  sendLog(message, level = 'info') {
+    this.broadcast({ type: 'log', message, level });
   }
 
   async stop() {

@@ -1,41 +1,39 @@
 stack(
-  // Kick drum
-  sound("bd").struct("x").gain(0.9),
-  
-  // Hi-hat pattern
-  sound("hh").struct("~ x ~ x ~ x ~ x").gain(0.5).pan(0.2),
-  
-  // Snare
-  sound("sd").struct("~ ~ ~ ~ x ~ ~ ~").gain(0.7),
+  // Atmospheric pad
+  note("<[c2 eb2] [g2 bb2]>").s("sawtooth").gain(0.3).cutoff(800).room(0.8).delay(0.5),
   
   // Bass line
-  note("<e2 e2 e2 e2 g2 g2 a2 a2>")
-    .sound("sawtooth")
-    .cutoff(400)
-    .resonance(0.3)
-    .gain(0.6)
-    .struct("x ~ x ~"),
+  note("<c1 eb1 g1 bb1>").s("sine").gain(0.7).shape(0.3),
   
-  // Main synth melody
-  note("<e4 [e4 d4] c4 [c4 b3] a3 [a3 g3] e3 [e3 d3]>")
-    .sound("square")
-    .cutoff(sine.range(800, 2000).slow(4))
-    .resonance(0.2)
+  // Arpeggiated synth
+  note("[c4 eb4 g4 bb4 c5 bb4 g4 eb4]*2")
+    .s("triangle")
     .gain(0.4)
+    .cutoff(sine.range(400, 1200).slow(4))
     .delay(0.3)
-    .delayfeedback(0.4)
     .delaytime(0.125)
-    .struct("x ~ ~ ~"),
+    .room(0.5),
   
-  // Chord stabs
-  note("<[e4,g4,b4] [d4,g4,b4] [c4,e4,a4] [a3,c4,e4]>")
-    .sound("sawtooth")
-    .cutoff(1500)
+  // Kick pattern
+  sound("bd*4").gain(0.8).shape(0.5),
+  
+  // Hi-hats
+  sound("hh*8").gain(0.3).pan(sine.range(-0.5, 0.5).fast(2)),
+  
+  // Snare
+  sound("~ sd ~ sd").gain(0.6).room(0.2),
+  
+  // Ethereal lead
+  note("<[c5 ~] [eb5 ~] [g5 ~] [bb5 ~]>")
+    .s("sawtooth")
     .gain(0.3)
-    .struct("~ ~ x ~")
-    .pan(-0.3),
+    .cutoff(1500)
+    .resonance(0.3)
+    .delay(0.6)
+    .delaytime(0.375)
+    .room(0.7)
+    .pan(sine.range(-0.3, 0.3).slow(8)),
   
-  // Additional percussion
-  sound("cp").struct("~ ~ ~ x ~ ~ ~ ~").gain(0.4).pan(0.5)
-)
-.cpm(62)
+  // Glitchy percussion
+  sound("[~ ~ ~ rim]*2").gain(0.4).speed(rand.range(0.8, 1.2)).sometimes(rev)
+).slow(2)

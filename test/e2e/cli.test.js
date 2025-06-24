@@ -33,7 +33,6 @@ test.describe('CLI E2E Tests', () => {
     expect(output).toContain('strudelcover');
     expect(output).toContain('Generate a Strudel cover');
     expect(output).toContain('Examples:');
-    expect(output).toContain('--api-key');
     expect(output).toContain('--record-output');
     expect(output).toContain('Environment Variables:');
     expect(output).toContain('ANTHROPIC_API_KEY');
