@@ -2,13 +2,9 @@ import { promises as fs } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import chalk from 'chalk';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { createReadStream } from 'fs';
+import { join } from 'path';
 
 const execAsync = promisify(exec);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 export class AudioAnalyzer {
   constructor(options = {}) {
@@ -95,7 +91,7 @@ export class AudioAnalyzer {
     // Simple BPM detection using aubio or sonic-annotator if available
     try {
       // Try aubio first
-      const { stdout } = await execAsync(`aubiotempo "${audioFile}" 2>/dev/null || echo ""`);
+      const { stdout } = await execAsync(`aubiotempo "${audioFile}" 2>/dev/null || echo ''`);
       if (stdout) {
         const bpmMatch = stdout.match(/(\d+\.\d+)/);
         if (bpmMatch) {
@@ -230,7 +226,7 @@ export class AudioAnalyzer {
         const start = i * (duration / segments);
         const { stdout } = await execAsync(
           `ffmpeg -i "${audioFile}" -ss ${start} -t 2 ` +
-          `-af "volumedetect" -f null - 2>&1 | grep mean_volume || echo "mean_volume: -20 dB"`
+          '-af "volumedetect" -f null - 2>&1 | grep mean_volume || echo "mean_volume: -20 dB"'
         );
         
         const match = stdout.match(/mean_volume: ([-\d.]+) dB/);

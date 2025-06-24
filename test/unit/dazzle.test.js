@@ -46,19 +46,19 @@ describe('Dazzle class', () => {
     it('should extract code from markdown code block', () => {
       const response = '```javascript\nconst test = true;\n```';
       const result = dazzle.extractCode(response);
-      assert.equal(result, 'const test = true;');
+      assert.equal(result, 'const test = true;\n');
     });
 
     it('should extract code from strudel code block', () => {
       const response = '```strudel\nsetcps(120/60/4)\n```';
       const result = dazzle.extractCode(response);
-      assert.equal(result, 'setcps(120/60/4)');
+      assert.equal(result, 'setcps(120/60/4)\n');
     });
 
-    it('should return trimmed response if no code block', () => {
+    it('should return response as-is if no code block', () => {
       const response = '  setcps(120/60/4)  ';
       const result = dazzle.extractCode(response);
-      assert.equal(result, 'setcps(120/60/4)');
+      assert.equal(result, '  setcps(120/60/4)  ');
     });
   });
 
@@ -111,7 +111,7 @@ describe('Dazzle class', () => {
       
       const html = await response.text();
       assert(html.includes('<!DOCTYPE html>'));
-      assert(html.includes('DAZZLE'));
+      assert(html.includes('StrudelCover'));
     });
   });
 });

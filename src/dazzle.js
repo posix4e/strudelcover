@@ -166,7 +166,7 @@ export class Dazzle {
     // Audio analysis
     let audioData = null;
     let bpm = estimateBPM(artist, song);
-    let songStructure = await getSongStructure(artist, song);
+    const songStructure = await getSongStructure(artist, song);
     
     if (audioFile && this.audioAnalysis.enabled) {
       console.log(chalk.gray(`Audio file: ${audioFile}`));
@@ -726,7 +726,9 @@ stack(
   }
 
   async startSampleServer(samples) {
-    if (this.sampleServer) return;
+    if (this.sampleServer) {
+      return;
+    }
     
     const samplePort = this.port + 1;
     console.log(chalk.cyan(`🎵 Starting sample server on port ${samplePort}`));
