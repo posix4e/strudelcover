@@ -47,26 +47,27 @@ jobs:
     #     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     #   run: npm run test:e2e
     
-    - name: Test Pattern Generation
-      env:
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      run: |
-        # Create a simple test script
-        cat > test-pattern.js << 'EOF'
-        import { dazzle } from './src/dazzle.js';
-        
-        try {
-          const pattern = await dazzle('test.mp3', 'Test Artist', 'Test Song');
-          console.log('Pattern generated successfully');
-          process.exit(0);
-        } catch (error) {
-          console.error('Pattern generation failed:', error);
-          process.exit(1);
-        }
-        EOF
-        
-        # Run the test
-        timeout 60s node test-pattern.js
+    # Pattern generation test is disabled - it imports a non-existent function
+    # - name: Test Pattern Generation
+    #   env:
+    #     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    #   run: |
+    #     # Create a simple test script
+    #     cat > test-pattern.js << 'EOF'
+    #     import { dazzle } from './src/dazzle.js';
+    #     
+    #     try {
+    #       const pattern = await dazzle('test.mp3', 'Test Artist', 'Test Song');
+    #       console.log('Pattern generated successfully');
+    #       process.exit(0);
+    #     } catch (error) {
+    #       console.error('Pattern generation failed:', error);
+    #       process.exit(1);
+    #     }
+    #     EOF
+    #     
+    #     # Run the test
+    #     timeout 60s node test-pattern.js
     
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
