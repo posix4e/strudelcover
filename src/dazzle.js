@@ -3,12 +3,13 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { chromium } from 'playwright';
 import Anthropic from '@anthropic-ai/sdk';
-import { promises as fs } from 'fs';
+import { promises as fs, createReadStream } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getSongStructure, estimateBPM, formatSongStructure, getLyricsHint } from './lyrics.js';
+import { analyzeAudio } from './audio-analyzer.js';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -35,6 +36,14 @@ export class Dazzle {
     this.maxRetries = 3;
     this.currentArtist = null;
     this.currentSong = null;
+    this.audioAnalysis = options.audioAnalysis || {
+      enabled: true,
+      bpmDetection: true,
+      sampleExtraction: true,
+      structureDetection: true
+    };
+    this.audioData = null;
+    this.sampleServer = null;
   }
 
   async start() {
@@ -142,13 +151,6 @@ export class Dazzle {
   async generatePattern(audioFile, artist, song, errorFeedback = null) {
     console.log(chalk.blue(`\n🎵 Generating pattern for "${song}" by ${artist}\n`));
     
-    if (audioFile) {
-      console.log(chalk.gray(`Audio file: ${audioFile}`));
-      // TODO: Implement audio analysis here
-    } else {
-      console.log(chalk.gray('No audio file - using estimated parameters'));
-    }
-    
     // Store current artist/song for retry
     this.currentArtist = artist;
     this.currentSong = song;
@@ -161,9 +163,47 @@ export class Dazzle {
       this.retryCount = 0;
     }
 
-    // Get song structure information
-    const songStructure = await getSongStructure(artist, song);
-    const bpm = estimateBPM(artist, song);
+    // Audio analysis
+    let audioData = null;
+    let bpm = estimateBPM(artist, song);
+    let songStructure = await getSongStructure(artist, song);
+    
+    if (audioFile && this.audioAnalysis.enabled) {
+      console.log(chalk.gray(`Audio file: ${audioFile}`));
+      try {
+        audioData = await analyzeAudio(audioFile, artist, song, this.audioAnalysis);
+        this.audioData = audioData;
+        
+        // Use detected BPM if available
+        if (audioData.bpm) {
+          bpm = audioData.bpm;
+          console.log(chalk.blue(`Using detected BPM: ${bpm}`));
+        }
+        
+        // Merge detected structure with estimated structure
+        if (audioData.structure && Object.keys(audioData.structure).length > 0) {
+          console.log(chalk.blue('Merging detected structure with estimates'));
+          // Update song structure with detected sections
+          for (const [section, timing] of Object.entries(audioData.structure)) {
+            if (songStructure[section]) {
+              songStructure[section].start = timing.start;
+              songStructure[section].duration = timing.end - timing.start;
+            }
+          }
+        }
+        
+        // Start sample server if samples were extracted
+        if (audioData.samples && audioData.samples.length > 0) {
+          await this.startSampleServer(audioData.samples);
+        }
+      } catch (error) {
+        console.log(chalk.yellow(`Audio analysis failed: ${error.message}`));
+        console.log(chalk.gray('Continuing with estimated parameters...'));
+      }
+    } else {
+      console.log(chalk.gray('No audio file - using estimated parameters'));
+    }
+
     const structureText = formatSongStructure(songStructure, bpm);
     const lyricsHint = getLyricsHint(artist, song);
     
@@ -176,12 +216,24 @@ export class Dazzle {
       'utf-8'
     );
     
+    // Add sample information if available
+    let sampleInfo = '';
+    if (audioData && audioData.samples && audioData.samples.length > 0) {
+      const samplePort = this.port + 1;
+      sampleInfo = '\n\nExtracted samples available:\n';
+      audioData.samples.forEach(sample => {
+        sampleInfo += `- "${sample.name}": Use with s("http://localhost:${samplePort}/${sample.name}")\n`;
+      });
+      sampleInfo += '\nIncorporate these custom samples into your pattern for authenticity.\n';
+    }
+    
     // Replace placeholders
     let prompt = promptTemplate
       .replace(/{{song}}/g, song)
       .replace(/{{artist}}/g, artist)
       .replace(/{{songStructure}}/g, structureText)
-      .replace(/{{lyricsHint}}/g, lyricsHint);
+      .replace(/{{lyricsHint}}/g, lyricsHint)
+      .replace(/{{sampleInfo}}/g, sampleInfo);
     
     // Add error feedback if retrying
     if (errorFeedback) {
@@ -673,6 +725,39 @@ stack(
     this.broadcast({ type: 'log', message, level });
   }
 
+  async startSampleServer(samples) {
+    if (this.sampleServer) return;
+    
+    const samplePort = this.port + 1;
+    console.log(chalk.cyan(`🎵 Starting sample server on port ${samplePort}`));
+    
+    // Create simple HTTP server for samples
+    this.sampleServer = createServer((req, res) => {
+      const sampleName = req.url.slice(1); // Remove leading /
+      const sample = samples.find(s => s.name === sampleName);
+      
+      if (sample && sample.path) {
+        res.writeHead(200, {
+          'Content-Type': 'audio/wav',
+          'Access-Control-Allow-Origin': '*'
+        });
+        const stream = createReadStream(sample.path);
+        stream.pipe(res);
+      } else {
+        res.writeHead(404);
+        res.end('Sample not found');
+      }
+    });
+    
+    this.sampleServer.listen(samplePort);
+    
+    // Log available samples
+    console.log(chalk.green('Available samples:'));
+    samples.forEach(sample => {
+      console.log(chalk.gray(`  - ${sample.name}: http://localhost:${samplePort}/${sample.name}`));
+    });
+  }
+
   async stop() {
     // Stop recording if in progress
     if (this.isRecording) {
@@ -687,6 +772,9 @@ stack(
     }
     if (this.server) {
       this.server.close();
+    }
+    if (this.sampleServer) {
+      this.sampleServer.close();
     }
   }
 }

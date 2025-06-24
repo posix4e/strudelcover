@@ -30,14 +30,20 @@ program
   .description('AI-powered tool to recreate songs as Strudel patterns')
   .version('0.1.0');
 
-// Default cover generation command
+// Main command with flexible arguments
 program
-  .command('cover <audioFile> <artist> <song>', { isDefault: true })
-  .description('Generate a Strudel cover of a song using Claude AI')
+  .argument('[input]', 'Audio file path or artist name')
+  .argument('[artistOrSong]', 'Artist name (if audio provided) or song name')
+  .argument('[song]', 'Song name (only if audio file provided)')
   .option('-k, --api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
   .option('-o, --output <dir>', 'Output directory', './strudelcover-output')
-  .option('-r, --record-output <file>', 'Output file for recording (e.g., output.webm)')
-  .action(async (audioFile, artist, song, options) => {
+  .option('-r, --record-output <file>', 'Output file for recording (e.g., output.wav)')
+  .option('--no-audio', 'AI-only mode without audio file analysis')
+  .option('--analyze-audio', 'Enable all audio analysis features (default when MP3 provided)')
+  .option('--no-bpm-detection', 'Skip BPM detection from audio')
+  .option('--no-sample-extraction', 'Skip sample extraction from audio')
+  .option('--no-structure-detection', 'Skip structure detection from audio')
+  .action(async (input, artistOrSong, song, options) => {
     console.log(chalk.blue.bold('\n🎸 StrudelCover - AI Song Recreation\n'));
     
     const spinner = ora('Initializing...').start();
@@ -51,15 +57,55 @@ program
         process.exit(1);
       }
       
-      // Check if audioFile is actually a file or if user is in AI-only mode
-      let actualAudioFile = audioFile;
-      if (audioFile === '--ai-only' || audioFile === '--no-audio' || !existsSync(audioFile)) {
-        actualAudioFile = null;
-        if (audioFile !== '--ai-only' && audioFile !== '--no-audio') {
-          console.log(chalk.yellow(`Audio file "${audioFile}" not found - running in AI-only mode`));
+      // Parse arguments flexibly
+      let audioFile = null;
+      let artist = null;
+      let songName = null;
+      
+      if (!input) {
+        spinner.fail('Please provide at least artist and song name');
+        console.log(chalk.gray('\nUsage:'));
+        console.log(chalk.gray('  strudelcover "Artist" "Song"                    # AI-only mode'));
+        console.log(chalk.gray('  strudelcover audio.mp3 "Artist" "Song"          # With audio analysis'));
+        process.exit(1);
+      }
+      
+      // Determine argument pattern
+      if (song) {
+        // Three arguments: audioFile artist song
+        if (existsSync(input)) {
+          audioFile = input;
+          artist = artistOrSong;
+          songName = song;
         } else {
-          console.log(chalk.yellow('🤖 Running in AI-only mode (no audio analysis)'));
+          spinner.fail(`Audio file "${input}" not found`);
+          process.exit(1);
         }
+      } else if (artistOrSong) {
+        // Two arguments: could be "artist song" or "audioFile artist"
+        if (existsSync(input) && !options.noAudio) {
+          // First arg is a file that exists
+          spinner.fail('When providing audio file, please specify both artist and song');
+          console.log(chalk.gray('Usage: strudelcover audio.mp3 "Artist" "Song"'));
+          process.exit(1);
+        } else {
+          // AI-only mode: artist song
+          artist = input;
+          songName = artistOrSong;
+        }
+      } else {
+        spinner.fail('Please provide both artist and song name');
+        process.exit(1);
+      }
+      
+      // Log mode
+      if (audioFile && !options.noAudio) {
+        console.log(chalk.green(`\n🎵 Audio file: ${audioFile}`));
+        if (options.analyzeAudio !== false) {
+          console.log(chalk.gray('Audio analysis: Enabled (use --no-audio to disable)'));
+        }
+      } else {
+        console.log(chalk.yellow('\n🤖 AI-only mode (no audio analysis)'));
       }
       
       spinner.succeed('Ready to create cover!');
@@ -67,7 +113,13 @@ program
       // Create StrudelCover instance
       const coverOptions = {
         apiKey,
-        outputDir: options.output
+        outputDir: options.output,
+        audioAnalysis: {
+          enabled: audioFile && !options.noAudio,
+          bpmDetection: options.bpmDetection !== false,
+          sampleExtraction: options.sampleExtraction !== false,
+          structureDetection: options.structureDetection !== false
+        }
       };
       
       const cover = new StrudelCover(coverOptions);
@@ -76,7 +128,7 @@ program
       const coverGenerationOptions = {
         recordOutput: options.recordOutput
       };
-      await cover.cover(actualAudioFile, artist, song, coverGenerationOptions);
+      await cover.cover(audioFile, artist, songName, coverGenerationOptions);
       
       // Keep the process running
       console.log(chalk.cyan('\n📊 Dashboard is running. Press Ctrl+C to exit.\n'));
@@ -92,30 +144,44 @@ program
 // Add examples to help
 program.on('--help', () => {
   console.log('');
-  console.log('Commands:');
-  console.log('  cover <input> <artist> <song>  Generate a Strudel cover using Claude AI');
+  console.log('Usage:');
+  console.log('  strudelcover [audio] <artist> <song> [options]');
   console.log('');
   console.log('Examples:');
-  console.log('  # Basic usage with audio file');
+  console.log('  # AI-only mode (no audio file)');
+  console.log('  $ strudelcover "The Beatles" "Hey Jude"');
+  console.log('');
+  console.log('  # With audio analysis');
   console.log('  $ strudelcover song.mp3 "The Beatles" "Hey Jude"');
   console.log('');
-  console.log('  # AI-only mode (no audio file)');
-  console.log('  $ strudelcover --ai-only "The Beatles" "Hey Jude"');
+  console.log('  # Disable audio analysis even with MP3');
+  console.log('  $ strudelcover song.mp3 "Artist" "Song" --no-audio');
   console.log('');
   console.log('  # Custom output directory');
-  console.log('  $ strudelcover song.mp3 "Artist" "Song" --output ./my-covers');
+  console.log('  $ strudelcover "Artist" "Song" --output ./my-covers');
   console.log('');
   console.log('  # Record the output');
-  console.log('  $ strudelcover --ai-only "Artist" "Song" --record-output output.webm');
+  console.log('  $ strudelcover "Artist" "Song" --record-output cover.wav');
+  console.log('');
+  console.log('  # Skip specific audio features');
+  console.log('  $ strudelcover audio.mp3 "Artist" "Song" --no-sample-extraction');
   console.log('');
   console.log('Features:');
-  console.log('  - AI-only mode - generate patterns without audio files');
+  console.log('  - AI-only mode by default (just provide artist and song)');
+  console.log('  - Optional audio analysis when MP3 provided');
+  console.log('  - BPM detection from audio (when available)');
+  console.log('  - Sample extraction for use in patterns');
+  console.log('  - Song structure detection from waveform');
   console.log('  - Dashboard on http://localhost:8888');
   console.log('  - Pattern generation using Claude Opus 4');
-  console.log('  - Song structure analysis and timing');
   console.log('  - Automatic playback with Playwright');
-  console.log('  - Embedded Strudel.cc player');
   console.log('  - Audio recording of generated patterns');
+  console.log('');
+  console.log('Audio Analysis Options:');
+  console.log('  --no-audio              Disable all audio analysis');
+  console.log('  --no-bpm-detection      Skip tempo analysis');
+  console.log('  --no-sample-extraction  Skip sample extraction');
+  console.log('  --no-structure-detection Skip structure analysis');
   console.log('');
   console.log('Environment Variables:');
   console.log('  ANTHROPIC_API_KEY     Anthropic API key (required)');

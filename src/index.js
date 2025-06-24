@@ -10,6 +10,12 @@ export class StrudelCover {
     this.options = options;
     this.outputDir = options.outputDir || './strudelcover-output';
     this.apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
+    this.audioAnalysis = options.audioAnalysis || {
+      enabled: true,
+      bpmDetection: true,
+      sampleExtraction: true,
+      structureDetection: true
+    };
     
     // Create output directory
     if (!existsSync(this.outputDir)) {
@@ -37,7 +43,8 @@ export class StrudelCover {
       // Create dazzle instance
       const dazzle = new Dazzle({
         apiKey: this.apiKey,
-        recordOutput: options.recordOutput
+        recordOutput: options.recordOutput,
+        audioAnalysis: this.audioAnalysis
       });
       
       await dazzle.start();

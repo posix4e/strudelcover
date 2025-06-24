@@ -3,7 +3,7 @@ Create a Strudel pattern for "{{song}}" by {{artist}}.
 {{songStructure}}
 
 {{lyricsHint}}
-
+{{sampleInfo}}
 Instructions:
 1. Follow the song structure timing closely - use .slow() or .fast() to match the BPM
 2. Create distinct patterns for each section (intro, verse, chorus, etc.)
