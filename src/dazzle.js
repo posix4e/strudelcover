@@ -6,8 +6,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { promises as fs } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { exec, spawn } from 'child_process';
+import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getSongStructure, estimateBPM, formatSongStructure, getLyricsHint } from './lyrics.js';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -153,6 +154,15 @@ export class Dazzle {
       this.retryCount = 0;
     }
 
+    // Get song structure information
+    const songStructure = await getSongStructure(artist, song);
+    const bpm = estimateBPM(artist, song);
+    const structureText = formatSongStructure(songStructure, bpm);
+    const lyricsHint = getLyricsHint(artist, song);
+    
+    console.log(chalk.blue('\n🎵 Song structure analysis:'));
+    console.log(chalk.gray(structureText));
+    
     // Load prompt template
     const promptTemplate = await fs.readFile(
       join(__dirname, 'templates', 'pattern-prompt.txt'), 
@@ -162,7 +172,9 @@ export class Dazzle {
     // Replace placeholders
     let prompt = promptTemplate
       .replace(/{{song}}/g, song)
-      .replace(/{{artist}}/g, artist);
+      .replace(/{{artist}}/g, artist)
+      .replace(/{{songStructure}}/g, structureText)
+      .replace(/{{lyricsHint}}/g, lyricsHint);
     
     // Add error feedback if retrying
     if (errorFeedback) {
@@ -212,11 +224,26 @@ export class Dazzle {
       console.log(chalk.gray(`Response length: ${fullResponse.length} characters`));
 
       // Extract code from response
-      this.pattern = this.extractCode(response.content[0].text);
+      const rawResponse = response.content[0].text;
+      console.log(chalk.blue('\n🔍 Raw response analysis:'));
+      console.log(chalk.gray(`- Raw length: ${rawResponse.length}`));
+      console.log(chalk.gray(`- Starts with: ${JSON.stringify(rawResponse.slice(0, 50))}`));
+      console.log(chalk.gray(`- Ends with: ${JSON.stringify(rawResponse.slice(-50))}`));
       
-      // Skip validation for now to debug issues
-      // console.log(chalk.yellow('\n🔍 Validating pattern...'));
-      // this.pattern = await this.validatePattern(this.pattern);
+      this.pattern = this.extractCode(rawResponse);
+      
+      console.log(chalk.blue('\n🔍 After extractCode:'));
+      console.log(chalk.gray(`- Pattern length: ${this.pattern.length}`));
+      console.log(chalk.gray(`- Last 20 chars: ${JSON.stringify(this.pattern.slice(-20))}`));
+      console.log(chalk.gray(`- Char codes of last 5: [${this.pattern.slice(-5).split('').map(c => c.charCodeAt(0)).join(', ')}]`));
+      
+      // Check parentheses balance
+      const openParens = (this.pattern.match(/\(/g) || []).length;
+      const closeParens = (this.pattern.match(/\)/g) || []).length;
+      console.log(chalk.yellow(`\n⚖️  Parentheses balance: ${openParens} open, ${closeParens} close`));
+      if (openParens !== closeParens) {
+        console.log(chalk.red(`❌ Unbalanced parentheses! Difference: ${closeParens - openParens}`));
+      }
       
     } catch (error) {
       console.error(chalk.red('Claude Error:'), error.message);
@@ -445,13 +472,34 @@ stack(
           await this.page.keyboard.press('Delete');
           
           // Type the new pattern
-          console.log(chalk.gray(`Pattern length: ${this.pattern.length} characters`));
-          console.log(chalk.gray(`Pattern ends with: "${this.pattern.slice(-50)}"`));
-          console.log(chalk.gray(`Last character code: ${this.pattern.charCodeAt(this.pattern.length - 1)}`));
+          console.log(chalk.blue('\n📝 About to type pattern:'));
+          console.log(chalk.gray(`- Pattern length: ${this.pattern.length} characters`));
+          console.log(chalk.gray(`- Last 30 chars: ${JSON.stringify(this.pattern.slice(-30))}`));
+          console.log(chalk.gray(`- Last char code: ${this.pattern.charCodeAt(this.pattern.length - 1)}`));
           
-          // Type the pattern exactly as received
-          await this.page.keyboard.type(this.pattern);
+          // Log each line ending for debugging
+          const lines = this.pattern.split('\n');
+          console.log(chalk.gray(`- Total lines: ${lines.length}`));
+          console.log(chalk.gray(`- Last line: ${JSON.stringify(lines[lines.length - 1])}`));
+          
+          // Type the pattern using the more reliable fill method
+          console.log(chalk.yellow('🔄 Using editor.fill() instead of keyboard.type()...'));
+          await editor.fill(this.pattern);
           console.log(chalk.green('✅ Pattern set in editor!'));
+          
+          // Wait a moment for the editor to process
+          await this.page.waitForTimeout(500);
+          
+          // Get what's actually in the editor now
+          const editorContent = await editor.textContent();
+          console.log(chalk.blue('\n🔍 Editor content after typing:'));
+          console.log(chalk.gray(`- Editor length: ${editorContent.length}`));
+          console.log(chalk.gray(`- Last 30 chars: ${JSON.stringify(editorContent.slice(-30))}`));
+          
+          // Compare lengths
+          if (editorContent.length !== this.pattern.length) {
+            console.log(chalk.red(`❌ Length mismatch! Pattern: ${this.pattern.length}, Editor: ${editorContent.length}, Diff: ${editorContent.length - this.pattern.length}`));
+          }
           
           // Evaluate the pattern
           const evalKey = process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter';
@@ -554,7 +602,7 @@ stack(
       // Use rec (part of sox) for recording
       this.recordProcess = exec(
         `rec -c 2 -r 44100 "${this.audioFilename}"`,
-        (error, stdout, stderr) => {
+        error => {
           if (error && !error.killed) {
             console.error(chalk.red('Recording error:'), error.message);
           }
@@ -571,7 +619,7 @@ stack(
         // Simple approach using afrecord (macOS built-in)
         this.recordProcess = exec(
           `afrecord -f WAVE -c 2 -r 44100 "${this.audioFilename}"`,
-          (error, stdout, stderr) => {
+          error => {
             if (error && !error.killed) {
               console.error(chalk.red('Recording error:'), error.message);
             }
