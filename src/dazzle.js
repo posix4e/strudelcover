@@ -113,7 +113,8 @@ export class Dazzle {
             this.broadcast({ type: 'error', data: text });
             
             // First try to fix by removing last )
-            if (text.includes('Unexpected token') && this.pattern && this.pattern.trim().endsWith(')')) {
+            // Only do this if the error mentions a parenthesis issue
+            if (text.includes('Unexpected token') && (text.includes(')') || text.includes('paren'))) {
               console.log(chalk.yellow('\n🔧 Trying to fix by removing trailing )...'));
               
               // Try to fix it in the editor
@@ -312,11 +313,13 @@ Return ONLY the corrected Strudel code, no explanations.`;
     // Try to find code block
     const codeMatch = response.match(/```(?:javascript|js|strudel)?\n([\s\S]*?)```/);
     if (codeMatch) {
-      return codeMatch[1].trim();
+      // Return the code block content WITHOUT trimming
+      return codeMatch[1];
     }
     
-    // Otherwise assume the whole response is code
-    return response.trim();
+    // Otherwise return the whole response as-is
+    // Since we asked for ONLY code, we shouldn't trim it
+    return response;
   }
   
   getFallbackPattern(song, artist) {
@@ -444,12 +447,10 @@ stack(
           // Type the new pattern
           console.log(chalk.gray(`Pattern length: ${this.pattern.length} characters`));
           console.log(chalk.gray(`Pattern ends with: "${this.pattern.slice(-50)}"`));
+          console.log(chalk.gray(`Last character code: ${this.pattern.charCodeAt(this.pattern.length - 1)}`));
           
-          // Clean the pattern to ensure no weird line ending issues
-          const cleanPattern = this.pattern.trim();
-          console.log(chalk.gray(`Clean pattern length: ${cleanPattern.length} characters`));
-          
-          await this.page.keyboard.type(cleanPattern);
+          // Type the pattern exactly as received
+          await this.page.keyboard.type(this.pattern);
           console.log(chalk.green('✅ Pattern set in editor!'));
           
           // Evaluate the pattern

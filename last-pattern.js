@@ -1,39 +1,31 @@
+// Genesis-inspired ambient electronic pattern
 stack(
-  // Atmospheric pad
-  note("<[c2 eb2] [g2 bb2]>").s("sawtooth").gain(0.3).cutoff(800).room(0.8).delay(0.5),
+  // Ethereal pad progression
+  note("<[c2 eb2] [g2 bb2] [f2 ab2] [eb2 g2]>".slow(4))
+  .s("sawtooth").lpf(800).gain(0.3).room(0.8).delay(0.5),
   
-  // Bass line
-  note("<c1 eb1 g1 bb1>").s("sine").gain(0.7).shape(0.3),
+  // Arpeggiated synth line
+  note("<[c4 eb4 g4 bb4]*2 [f4 ab4 c5 eb5]*2>".fast(2))
+  .s("triangle").lpf(1200).gain(0.2).pan(sine.range(-0.5,0.5).slow(4)),
   
-  // Arpeggiated synth
-  note("[c4 eb4 g4 bb4 c5 bb4 g4 eb4]*2")
-    .s("triangle")
-    .gain(0.4)
-    .cutoff(sine.range(400, 1200).slow(4))
-    .delay(0.3)
-    .delaytime(0.125)
-    .room(0.5),
+  // Bass foundation
+  note("<c1 c1 f1 eb1>".slow(2))
+  .s("sine").shape(0.4).gain(0.5),
   
-  // Kick pattern
-  sound("bd*4").gain(0.8).shape(0.5),
+  // Ethereal vocal-like lead
+  note("<[g4 bb4] [c5 eb5] [f4 ab4] [g4 bb4]>".slow(2))
+  .s("sawtooth").vowel("<a e i o>").lpf(2000).gain(0.15)
+  .room(0.9).delay(0.75).delaytime(0.125).delayfeedback(0.6),
   
-  // Hi-hats
-  sound("hh*8").gain(0.3).pan(sine.range(-0.5, 0.5).fast(2)),
+  // Rhythmic elements
+  stack(
+    s("bd").gain(0.7).shape(0.3).n("<0 0 0 0>"),
+    s("hh").gain(0.3).pan(0.2).n("<0 0 0 0 0 0 0 0>").fast(2),
+    s("cp").gain(0.4).room(0.3).n("<~ 0 ~ 0>").delay(0.1)
+  ).slow(2),
   
-  // Snare
-  sound("~ sd ~ sd").gain(0.6).room(0.2),
-  
-  // Ethereal lead
-  note("<[c5 ~] [eb5 ~] [g5 ~] [bb5 ~]>")
-    .s("sawtooth")
-    .gain(0.3)
-    .cutoff(1500)
-    .resonance(0.3)
-    .delay(0.6)
-    .delaytime(0.375)
-    .room(0.7)
-    .pan(sine.range(-0.3, 0.3).slow(8)),
-  
-  // Glitchy percussion
-  sound("[~ ~ ~ rim]*2").gain(0.4).speed(rand.range(0.8, 1.2)).sometimes(rev)
+  // Ambient texture
+  note("c5 eb5 g5 bb5".slow(8))
+  .s("sawtooth").lpf(400).gain(0.1).room(0.95)
+  .pan(perlin.range(-0.8,0.8).slow(8))
 ).slow(2)
