@@ -29,6 +29,11 @@ export class Dazzle {
     this.mediaRecorder = null;
     this.recordedChunks = [];
     this.recordOutput = options.recordOutput;
+    this.lastError = null;
+    this.retryCount = 0;
+    this.maxRetries = 3;
+    this.currentArtist = null;
+    this.currentSong = null;
   }
 
   async start() {
@@ -104,6 +109,36 @@ export class Dazzle {
       
       const context = await this.browser.newContext(contextOptions);
       this.page = await context.newPage();
+      
+      // Listen for console errors
+      this.page.on('console', msg => {
+        if (msg.type() === 'error') {
+          const text = msg.text();
+          if (text.includes('SyntaxError') || text.includes('Error')) {
+            console.log(chalk.red('\n❌ Strudel Error:'));
+            console.log(chalk.red(text));
+            // Store the error
+            this.lastError = text;
+            // Broadcast error to dashboard
+            this.broadcast({ type: 'error', data: text });
+            
+            // First try to fix by removing last )
+            if (text.includes('Unexpected token') && this.pattern && this.pattern.trim().endsWith(')')) {
+              console.log(chalk.yellow('\n🔧 Trying to fix by removing trailing )...'));
+              
+              // Try to fix it in the editor
+              this.tryRemoveTrailingParen();
+            } else if (this.retryCount < this.maxRetries && this.currentArtist && this.currentSong) {
+              // Otherwise retry with error feedback
+              console.log(chalk.yellow(`\n🔄 Retrying with error feedback (attempt ${this.retryCount + 1}/${this.maxRetries})...`));
+              setTimeout(() => {
+                this.retryWithErrorFeedback();
+              }, 2000);
+            }
+          }
+        }
+      });
+      
       await this.page.goto(`http://localhost:${this.port}`);
     } catch (error) {
       console.log(chalk.yellow('Could not launch browser:', error.message));
@@ -112,8 +147,17 @@ export class Dazzle {
     }
   }
 
-  async generatePattern(audioFile, artist, song) {
+  async generatePattern(audioFile, artist, song, errorFeedback = null) {
     console.log(chalk.blue(`\n🎵 Generating pattern for "${song}" by ${artist}\n`));
+    
+    // Store current artist/song for retry
+    this.currentArtist = artist;
+    this.currentSong = song;
+    
+    // Reset retry count if this is a new request (not a retry)
+    if (!errorFeedback) {
+      this.retryCount = 0;
+    }
 
     // Load prompt template
     const promptTemplate = await fs.readFile(
@@ -122,9 +166,27 @@ export class Dazzle {
     );
     
     // Replace placeholders
-    const prompt = promptTemplate
+    let prompt = promptTemplate
       .replace(/{{song}}/g, song)
       .replace(/{{artist}}/g, artist);
+    
+    // Add error feedback if retrying
+    if (errorFeedback) {
+      let errorMessage = `IMPORTANT: The previous pattern had an error. Please fix it:\n\nERROR: ${errorFeedback}\n\n`;
+      
+      // Check for common function errors and provide documentation reference
+      if (errorFeedback.includes('sound is not defined') || 
+          errorFeedback.includes('setclock is not defined') ||
+          errorFeedback.includes('kick is not defined') ||
+          errorFeedback.includes('bass is not defined') ||
+          errorFeedback.includes('synth is not defined')) {
+        errorMessage += 'It looks like you\'re using functions that don\'t exist in Strudel. Please consult the Strudel documentation at strudel.cc/learn/ to find the correct functions.\n\n';
+      }
+      
+      errorMessage += 'Please generate a corrected pattern that fixes this error. Make sure to use valid Strudel syntax.\n\n';
+      
+      prompt = errorMessage + prompt;
+    }
 
     console.log(chalk.yellow('🤖 Asking Claude to generate pattern...'));
     console.log(chalk.gray(`Prompt length: ${prompt.length} characters`));
@@ -138,7 +200,7 @@ export class Dazzle {
     const startTime = Date.now();
     try {
       const response = await this.anthropic.messages.create({
-        model: 'claude-3-opus-20240229',
+        model: 'claude-opus-4-20250514',
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }]
       });
@@ -147,13 +209,21 @@ export class Dazzle {
       console.log(chalk.gray(`\nClaude response time: ${(endTime - startTime) / 1000}s`));
       
       // Show the full response from Claude
+      const fullResponse = response.content[0].text;
       console.log(chalk.green('\n📥 Claude\'s full response:'));
       console.log(chalk.gray('─'.repeat(70)));
-      console.log(chalk.dim(response.content[0].text));
+      // Don't truncate - show full response
+      console.log(chalk.dim(fullResponse));
       console.log(chalk.gray('─'.repeat(70)));
+      console.log(chalk.gray(`Response length: ${fullResponse.length} characters`));
 
       // Extract code from response
       this.pattern = this.extractCode(response.content[0].text);
+      
+      // Skip validation for now to debug issues
+      // console.log(chalk.yellow('\n🔍 Validating pattern...'));
+      // this.pattern = await this.validatePattern(this.pattern);
+      
     } catch (error) {
       console.error(chalk.red('Claude Error:'), error.message);
       // Fallback to a simple pattern
@@ -164,11 +234,21 @@ export class Dazzle {
     console.log(chalk.green('✓ Pattern generated'));
     console.log(chalk.cyan('\n📝 Generated pattern:'));
     console.log(chalk.gray('─'.repeat(50)));
+    // Don't truncate - show full pattern
     console.log(this.pattern);
     console.log(chalk.gray('─'.repeat(50)));
+    console.log(chalk.gray(`Pattern length: ${this.pattern.length} characters`));
     
     // Send to dashboard
     this.broadcast({ type: 'pattern', data: this.pattern });
+    
+    // Write pattern to file for debugging
+    await fs.writeFile('last-pattern.js', this.pattern);
+    console.log(chalk.gray('Pattern written to last-pattern.js for inspection'));
+    console.log(chalk.blue('\n🔍 Pattern details for comparison:'));
+    console.log(chalk.gray(`- Total length: ${this.pattern.length} characters`));
+    console.log(chalk.gray(`- First 100 chars: "${this.pattern.slice(0, 100)}..."`));
+    console.log(chalk.gray(`- Last 100 chars: "...${this.pattern.slice(-100)}"`));
     
     // Wait a bit then try autoplay
     setTimeout(() => this.autoplay(), 3000);
@@ -180,6 +260,55 @@ export class Dazzle {
     }
     
     return this.pattern;
+  }
+  
+  async retryWithErrorFeedback() {
+    this.retryCount++;
+    
+    // Clear the last error
+    const errorToFix = this.lastError;
+    this.lastError = null;
+    
+    console.log(chalk.yellow('\n🔧 Sending error to Claude for correction...'));
+    console.log(chalk.gray('Error:', errorToFix));
+    
+    // Generate a new pattern with error feedback
+    await this.generatePattern(null, this.currentArtist, this.currentSong, errorToFix);
+  }
+
+  async validatePattern(pattern) {
+    const validationPrompt = `You are a Strudel live coding expert. I have a pattern that may contain errors. Please review it and fix any issues.
+
+IMPORTANT Strudel syntax rules:
+- Use s() for samples: s("bd"), s("hh"), s("sd")
+- Use note() for notes: note("C3 D3 E3")
+- Use sound() to apply sounds to notes: note("C3 D3").sound("piano")
+- Do NOT use functions like kick(), bass(), synth(), voicings(), etc - these don't exist
+- Use stack() to layer patterns
+- Use cat() to sequence patterns
+- Common effects: .gain(), .room(), .delay(), .pan(), .cutoff(), .resonance()
+- Rhythm notation: "bd ~ sd ~" where ~ is a rest
+- Euclidean rhythms: s("bd(3,8)")
+
+Here's the pattern to validate and fix:
+
+${pattern}
+
+Return ONLY the corrected Strudel code, no explanations.`;
+
+    try {
+      const response = await this.anthropic.messages.create({
+        model: 'claude-opus-4-20250514',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: validationPrompt }]
+      });
+      
+      console.log(chalk.green('✓ Pattern validated and corrected'));
+      return this.extractCode(response.content[0].text);
+    } catch (error) {
+      console.error(chalk.red('Validation Error:'), error.message);
+      return pattern; // Return original if validation fails
+    }
   }
 
   extractCode(response) {
@@ -216,10 +345,75 @@ stack(
     });
   }
 
+  async tryRemoveTrailingParen() {
+    if (!this.page) {return;}
+    
+    try {
+      // Wait for iframe
+      await this.page.waitForSelector('iframe#strudel', { timeout: 5000 });
+      
+      // Get the iframe
+      const frame = this.page.frames().find(f => f.url().includes('strudel.cc'));
+      if (!frame) {
+        console.log(chalk.red('Could not find Strudel frame'));
+        return;
+      }
+
+      // Wait for editor to be ready
+      await frame.waitForLoadState('networkidle');
+      
+      // Find the CodeMirror editor
+      const editor = await frame.$('.cm-content');
+      if (editor) {
+        // Click at the end of the editor
+        await editor.click();
+        
+        // Move to end of document
+        const endKey = process.platform === 'darwin' ? 'Meta+End' : 'Control+End';
+        await this.page.keyboard.press(endKey);
+        
+        // Delete the last character (the extra parenthesis)
+        await this.page.keyboard.press('Backspace');
+        
+        console.log(chalk.green('✅ Removed trailing parenthesis'));
+        
+        // Re-evaluate the pattern
+        const evalKey = process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter';
+        await this.page.keyboard.press(evalKey);
+        console.log(chalk.green('✅ Re-evaluated pattern!'));
+        
+        // Wait a bit to see if it worked
+        await this.page.waitForTimeout(2000);
+        
+        // Now try to click play button
+        const playButton = await frame.$('button[title="play"]');
+        if (playButton) {
+          await playButton.click();
+          console.log(chalk.green('✅ Autoplay successful after fix!'));
+          
+          // Start recording after autoplay
+          setTimeout(() => {
+            this.broadcast({ type: 'autoplayStarted' });
+            if (this.recordOutput) {
+              this.startRecording();
+            }
+          }, 1000);
+        } else {
+          // Try spacebar as fallback
+          await this.page.keyboard.press('Space');
+        }
+      } else {
+        console.log(chalk.yellow('⚠️  Could not find editor'));
+      }
+    } catch (error) {
+      console.log(chalk.yellow('Failed to remove trailing paren:', error.message));
+    }
+  }
+
   async autoplay() {
     if (!this.page) {return;}
     
-    console.log(chalk.yellow('🎵 Attempting autoplay...'));
+    console.log(chalk.yellow('🎵 Setting pattern and attempting autoplay...'));
     
     try {
       // Wait for iframe
@@ -236,6 +430,52 @@ stack(
       await frame.waitForLoadState('networkidle');
       await this.page.waitForTimeout(2000);
       
+      // Set the pattern in the editor
+      if (this.pattern) {
+        console.log(chalk.cyan('📝 Setting pattern in Strudel editor...'));
+        
+        // Find the CodeMirror editor
+        const editor = await frame.$('.cm-content');
+        if (editor) {
+          // Clear existing content
+          await editor.click();
+          // Use platform-specific select all
+          const selectAllKey = process.platform === 'darwin' ? 'Meta+A' : 'Control+A';
+          await this.page.keyboard.press(selectAllKey);
+          await this.page.keyboard.press('Delete');
+          
+          // Type the new pattern
+          console.log(chalk.gray(`Pattern length: ${this.pattern.length} characters`));
+          console.log(chalk.gray(`Pattern ends with: "${this.pattern.slice(-50)}"`));
+          
+          // Clean the pattern to ensure no weird line ending issues
+          const cleanPattern = this.pattern.trim();
+          console.log(chalk.gray(`Clean pattern length: ${cleanPattern.length} characters`));
+          
+          await this.page.keyboard.type(cleanPattern);
+          console.log(chalk.green('✅ Pattern set in editor!'));
+          
+          // Evaluate the pattern
+          const evalKey = process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter';
+          await this.page.keyboard.press(evalKey);
+          console.log(chalk.green('✅ Pattern evaluated!'));
+          
+          // Wait a bit for the pattern to be processed
+          await this.page.waitForTimeout(2000);
+          
+          // Check for errors in the console
+          const errorElement = await frame.$('.error-message, .cm-error, [class*="error"]');
+          if (errorElement) {
+            const errorText = await errorElement.textContent();
+            console.log(chalk.red('\n❌ Pattern has syntax errors:'));
+            console.log(chalk.red(errorText));
+            console.log(chalk.yellow('\nTry fixing the pattern manually in the browser.'));
+          }
+        } else {
+          console.log(chalk.yellow('⚠️  Could not find editor - pattern may not be set'));
+        }
+      }
+      
       // Try to click play
       const playButton = await frame.$('button[title="play"]');
       if (playButton) {
@@ -251,7 +491,7 @@ stack(
         }, 1000);
       } else {
         // Try spacebar as fallback
-        await frame.press('body', 'Space');
+        await this.page.keyboard.press('Space');
       }
     } catch (error) {
       console.log(chalk.yellow('Autoplay failed:', error.message));

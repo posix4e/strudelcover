@@ -207,6 +207,12 @@
             }
           }, 2000);
         });
+      } else if (message.type === 'error') {
+        // Display error prominently
+        status.innerHTML = `<div style="color: #ff4444; background: #2a1515; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="margin: 0 0 10px 0;">❌ Pattern Error:</h3>
+          <pre style="margin: 0; overflow-x: auto;">${message.data}</pre>
+        </div>`;
       } else if (message.type === 'autoplayStarted') {
         recordBtn.disabled = false;
         status.textContent = 'Playing! Click record to capture the output.';
