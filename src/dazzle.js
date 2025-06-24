@@ -142,6 +142,13 @@ export class Dazzle {
   async generatePattern(audioFile, artist, song, errorFeedback = null) {
     console.log(chalk.blue(`\n🎵 Generating pattern for "${song}" by ${artist}\n`));
     
+    if (audioFile) {
+      console.log(chalk.gray(`Audio file: ${audioFile}`));
+      // TODO: Implement audio analysis here
+    } else {
+      console.log(chalk.gray('No audio file - using estimated parameters'));
+    }
+    
     // Store current artist/song for retry
     this.currentArtist = artist;
     this.currentSong = song;

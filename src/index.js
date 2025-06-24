@@ -22,6 +22,11 @@ export class StrudelCover {
    * Main cover generation function
    */
   async cover(songPath, artistName, songName, options = {}) {
+    // Handle AI-only mode where songPath might be null
+    if (songPath === null) {
+      console.log(chalk.gray('No audio file provided - using AI-only generation'));
+    }
+    
     if (!this.apiKey) {
       throw new Error('Anthropic API key required');
     }

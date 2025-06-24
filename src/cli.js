@@ -51,10 +51,15 @@ program
         process.exit(1);
       }
       
-      // Check audio file exists
-      if (!existsSync(audioFile)) {
-        spinner.fail(`Audio file not found: ${audioFile}`);
-        process.exit(1);
+      // Check if audioFile is actually a file or if user is in AI-only mode
+      let actualAudioFile = audioFile;
+      if (audioFile === '--ai-only' || audioFile === '--no-audio' || !existsSync(audioFile)) {
+        actualAudioFile = null;
+        if (audioFile !== '--ai-only' && audioFile !== '--no-audio') {
+          console.log(chalk.yellow(`Audio file "${audioFile}" not found - running in AI-only mode`));
+        } else {
+          console.log(chalk.yellow('🤖 Running in AI-only mode (no audio analysis)'));
+        }
       }
       
       spinner.succeed('Ready to create cover!');
@@ -71,7 +76,7 @@ program
       const coverGenerationOptions = {
         recordOutput: options.recordOutput
       };
-      await cover.cover(audioFile, artist, song, coverGenerationOptions);
+      await cover.cover(actualAudioFile, artist, song, coverGenerationOptions);
       
       // Keep the process running
       console.log(chalk.cyan('\n📊 Dashboard is running. Press Ctrl+C to exit.\n'));
@@ -91,22 +96,26 @@ program.on('--help', () => {
   console.log('  cover <input> <artist> <song>  Generate a Strudel cover using Claude AI');
   console.log('');
   console.log('Examples:');
-  console.log('  # Basic usage');
+  console.log('  # Basic usage with audio file');
   console.log('  $ strudelcover song.mp3 "The Beatles" "Hey Jude"');
+  console.log('');
+  console.log('  # AI-only mode (no audio file)');
+  console.log('  $ strudelcover --ai-only "The Beatles" "Hey Jude"');
   console.log('');
   console.log('  # Custom output directory');
   console.log('  $ strudelcover song.mp3 "Artist" "Song" --output ./my-covers');
   console.log('');
   console.log('  # Record the output');
-  console.log('  $ strudelcover song.mp3 "Artist" "Song" --record-output output.webm');
+  console.log('  $ strudelcover --ai-only "Artist" "Song" --record-output output.webm');
   console.log('');
   console.log('Features:');
+  console.log('  - AI-only mode - generate patterns without audio files');
   console.log('  - Dashboard on http://localhost:8888');
-  console.log('  - Pattern generation using Claude 3 Opus');
+  console.log('  - Pattern generation using Claude Opus 4');
+  console.log('  - Song structure analysis and timing');
   console.log('  - Automatic playback with Playwright');
   console.log('  - Embedded Strudel.cc player');
-  console.log('  - Audio visualization');
-  console.log('  - Video recording (visual only)');
+  console.log('  - Audio recording of generated patterns');
   console.log('');
   console.log('Environment Variables:');
   console.log('  ANTHROPIC_API_KEY     Anthropic API key (required)');
