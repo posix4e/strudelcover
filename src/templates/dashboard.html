@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>StrudelCover Dashboard</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0a0a0a;
+      color: #0ff;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    .header {
+      background: #111;
+      padding: 20px;
+      border-bottom: 2px solid #0ff;
+    }
+    
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    
+    .sidebar {
+      width: 350px;
+      background: #0d0d0d;
+      border-right: 1px solid #0ff;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    
+    .section {
+      padding: 20px;
+      border-bottom: 1px solid #222;
+    }
+    
+    .section-title {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 15px;
+      color: #0ff;
+      opacity: 0.8;
+    }
+    
+    #status {
+      font-size: 16px;
+      padding: 15px;
+      background: rgba(0,255,255,0.1);
+      border-radius: 5px;
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    
+    .info-item {
+      background: rgba(0,255,255,0.05);
+      padding: 10px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,255,255,0.2);
+    }
+    
+    .info-label {
+      font-size: 11px;
+      opacity: 0.6;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    
+    .info-value {
+      font-size: 14px;
+      font-weight: bold;
+    }
+    
+    #controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    
+    button {
+      flex: 1;
+      background: #0ff;
+      color: #000;
+      border: none;
+      padding: 12px 20px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+      border-radius: 3px;
+    }
+    
+    button:hover:not(:disabled) {
+      background: #fff;
+      box-shadow: 0 0 20px #0ff;
+    }
+    
+    button:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    
+    .recording {
+      background: #ff0044 !important;
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    #pattern-info {
+      background: #111;
+      padding: 15px;
+      border-radius: 5px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    
+    .strudel-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    #strudel-container {
+      flex: 1;
+      background: #000;
+      position: relative;
+    }
+    
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    
+    .error-display {
+      background: #2a1515;
+      border: 2px solid #ff4444;
+      border-radius: 5px;
+      padding: 20px;
+      margin: 15px 0;
+    }
+    
+    .error-display h3 {
+      color: #ff4444;
+      margin: 0 0 10px 0;
+    }
+    
+    .error-display pre {
+      margin: 0;
+      overflow-x: auto;
+      color: #ff8888;
+    }
+    
+    #log-area {
+      background: #111;
+      padding: 10px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 11px;
+      max-height: 200px;
+      overflow-y: auto;
+      color: #888;
+    }
+    
+    .log-entry {
+      margin-bottom: 5px;
+      display: flex;
+      gap: 10px;
+    }
+    
+    .log-time {
+      color: #666;
+      flex-shrink: 0;
+    }
+    
+    .log-message {
+      color: #aaa;
+    }
+    
+    .log-error {
+      color: #ff4444;
+    }
+    
+    .log-success {
+      color: #44ff44;
+    }
+    
+    .log-info {
+      color: #0ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>
+      <span>🎵</span>
+      <span>StrudelCover Dashboard</span>
+      <span>🎵</span>
+    </h1>
+  </div>
+  
+  <div class="main-container">
+    <div class="sidebar">
+      <div class="section">
+        <div class="section-title">Status</div>
+        <div id="status">Initializing...</div>
+        
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Artist</div>
+            <div class="info-value" id="artist-name">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Song</div>
+            <div class="info-value" id="song-name">-</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Model</div>
+            <div class="info-value">Claude Opus 4</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Retries</div>
+            <div class="info-value" id="retry-count">0</div>
+          </div>
+        </div>
+        
+        <div id="controls">
+          <button id="recordBtn" disabled>Start Recording</button>
+        </div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Pattern Info</div>
+        <div id="pattern-info">No pattern generated yet</div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Activity Log</div>
+        <div id="log-area"></div>
+      </div>
+    </div>
+    
+    <div class="strudel-area">
+      <div id="strudel-container">
+        <iframe id="strudel" src="https://strudel.cc"></iframe>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const ws = new WebSocket('ws://localhost:{{port}}');
+    const status = document.getElementById('status');
+    const iframe = document.getElementById('strudel');
+    const recordBtn = document.getElementById('recordBtn');
+    const patternInfo = document.getElementById('pattern-info');
+    const logArea = document.getElementById('log-area');
+    const artistName = document.getElementById('artist-name');
+    const songName = document.getElementById('song-name');
+    const retryCount = document.getElementById('retry-count');
+    
+    let isRecording = false;
+    let currentPattern = null;
+    
+    // Logging function
+    function log(message, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      
+      const time = new Date().toLocaleTimeString();
+      entry.innerHTML = `
+        <span class="log-time">${time}</span>
+        <span class="log-message log-${type}">${message}</span>
+      `;
+      
+      logArea.appendChild(entry);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+    
+    // Record button handler
+    recordBtn.addEventListener('click', () => {
+      if (!isRecording) {
+        ws.send(JSON.stringify({ type: 'startRecording' }));
+        recordBtn.textContent = 'Stop Recording';
+        recordBtn.classList.add('recording');
+        isRecording = true;
+        log('Recording started', 'success');
+      } else {
+        ws.send(JSON.stringify({ type: 'stopRecording' }));
+        recordBtn.textContent = 'Start Recording';
+        recordBtn.classList.remove('recording');
+        isRecording = false;
+        log('Recording stopped', 'info');
+      }
+    });
+    
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'ready' }));
+      status.textContent = 'Connected - waiting for pattern...';
+      log('WebSocket connected', 'success');
+    };
+    
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      
+      switch(message.type) {
+        case 'pattern':
+          currentPattern = message.data;
+          status.textContent = 'Pattern received - loading in Strudel...';
+          patternInfo.textContent = currentPattern;
+          log('Pattern generated successfully', 'success');
+          
+          // Display pattern stats
+          const lines = currentPattern.split('\n').length;
+          const chars = currentPattern.length;
+          log(`Pattern stats: ${lines} lines, ${chars} characters`, 'info');
+          break;
+          
+        case 'songInfo':
+          artistName.textContent = message.artist || '-';
+          songName.textContent = message.song || '-';
+          log(`Generating pattern for "${message.song}" by ${message.artist}`, 'info');
+          break;
+          
+        case 'error':
+          // Display error prominently
+          status.innerHTML = `<div class="error-display">
+            <h3>❌ Pattern Error</h3>
+            <pre>${message.data}</pre>
+          </div>`;
+          log(`Error: ${message.data}`, 'error');
+          break;
+          
+        case 'retryUpdate':
+          retryCount.textContent = message.count;
+          log(`Retry attempt ${message.count}`, 'info');
+          break;
+          
+        case 'autoplayStarted':
+          recordBtn.disabled = false;
+          status.textContent = 'Playing! Click record to capture audio.';
+          log('Autoplay started', 'success');
+          
+          // Auto-start recording if specified via CLI
+          if ({{autoRecord}}) {
+            setTimeout(() => {
+              recordBtn.click();
+            }, 500);
+          }
+          break;
+          
+        case 'recordingStarted':
+          status.textContent = 'Recording audio...';
+          break;
+          
+        case 'recordingStopped':
+          status.textContent = 'Recording complete!';
+          if (message.filename) {
+            log(`Audio saved to: ${message.filename}`, 'success');
+          }
+          break;
+          
+        case 'log':
+          log(message.message, message.level || 'info');
+          break;
+      }
+    };
+    
+    ws.onerror = () => {
+      status.textContent = 'Connection error';
+      log('WebSocket connection error', 'error');
+    };
+    
+    ws.onclose = () => {
+      status.textContent = 'Disconnected';
+      log('WebSocket disconnected', 'error');
+    };
+  </script>
+</body>
+</html>

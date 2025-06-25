@@ -1,0 +1,42 @@
+{
+  "name": "@strudel/strudelcover",
+  "version": "0.1.0",
+  "description": "AI-powered music pattern generator using Strudel.cc",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "strudelcover": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "cover": "node src/cli.js",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.9",
+    "chalk": "^5.4.1",
+    "commander": "^11.1.0",
+    "dotenv": "^16.5.0",
+    "node-fetch": "^3.3.2",
+    "open": "^9.1.0",
+    "ora": "^7.0.1",
+    "playwright": "^1.53.1",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "eslint": "^8.57.0"
+  },
+  "keywords": [
+    "strudel",
+    "audio",
+    "music",
+    "cover",
+    "ai",
+    "generation"
+  ],
+  "author": "",
+  "license": "AGPL-3.0+"
+}

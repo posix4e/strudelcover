@@ -1,0 +1,9 @@
+.env
+recordings/
+*.wav
+*.webm
+test-results/
+playwright-report/
+test-output.wav
+*.log
+last-pattern.js

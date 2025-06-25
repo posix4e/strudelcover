@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+    
+    - name: Checkout LFS objects
+      run: git lfs checkout
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run ESLint
+      run: npm run lint
+    
+    - name: Install Playwright
+      run: npx playwright install --with-deps chromium
+    
+    - name: Install FFmpeg and Sox
+      run: sudo apt-get update && sudo apt-get install -y ffmpeg sox
+    
+    - name: Run Tests
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: npm test
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          test-results/
+          recordings/
+        retention-days: 7

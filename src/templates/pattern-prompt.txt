@@ -1,0 +1,21 @@
+Create a Strudel pattern for "{{song}}" by {{artist}}.
+
+{{songStructure}}
+
+{{lyricsHint}}
+{{sampleInfo}}
+Instructions:
+1. Follow the song structure timing closely - use .slow() or .fast() to match the BPM
+2. Create distinct patterns for each section (intro, verse, chorus, etc.)
+3. Use comments to mark each section clearly
+4. Build energy progressively through the song
+5. Include variations between repeated sections
+6. Use Strudel's pattern sequencing to create the full song structure
+
+The pattern should:
+- Be a complete musical arrangement from intro to outro
+- Capture the essence and style of the original song
+- Use dynamics and effects to create emotional depth
+- Include drums, bass, chords, melody, and atmospheric elements
+
+Return ONLY the valid Strudel/JavaScript code that can be evaluated directly. Do not include any explanations or markdown formatting.
