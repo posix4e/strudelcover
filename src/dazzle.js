@@ -15,6 +15,21 @@ const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Helper to find peak energy section
+function findPeakEnergy(sections) {
+  let maxDensity = 0;
+  let peakSection = 'chorus';
+  
+  for (const [section, data] of Object.entries(sections)) {
+    if (data.analysis.onset_density > maxDensity) {
+      maxDensity = data.analysis.onset_density;
+      peakSection = section;
+    }
+  }
+  
+  return `${peakSection} (${sections[peakSection].analysis.energy})`;
+}
+
 export class Dazzle {
   constructor(options = {}) {
     this.anthropic = new Anthropic({
@@ -165,8 +180,10 @@ export class Dazzle {
 
     // Audio analysis
     let audioData = null;
-    let bpm = estimateBPM(artist, song);
-    const songStructure = await getSongStructure(artist, song);
+    let bpm = await estimateBPM(artist, song, audioFile);
+    const songStructureResult = await getSongStructure(artist, song, audioFile);
+    const songStructure = songStructureResult.structure;
+    const fullAnalysis = songStructureResult.fullAnalysis;
     
     if (audioFile && this.audioAnalysis.enabled) {
       console.log(chalk.gray(`Audio file: ${audioFile}`));
@@ -227,13 +244,46 @@ export class Dazzle {
       sampleInfo += '\nIncorporate these custom samples into your pattern for authenticity.\n';
     }
     
+    // Prepare analysis data for comprehensive prompt
+    let analysisDataText = '';
+    if (fullAnalysis) {
+      analysisDataText = `\nFile: ${fullAnalysis.file_info.duration}s @ ${fullAnalysis.global_analysis.bpm} BPM\n`;
+      analysisDataText += `Beats: ${fullAnalysis.global_analysis.beats_count}, Onsets: ${fullAnalysis.global_analysis.onsets_count}\n\n`;
+      analysisDataText += 'SECTION ANALYSIS:\n';
+      
+      for (const [section, data] of Object.entries(fullAnalysis.sections)) {
+        analysisDataText += `\n${section.toUpperCase()} (${data.start.toFixed(1)}s - ${data.end.toFixed(1)}s):\n`;
+        analysisDataText += `  - BPM: ${data.analysis.bpm} (${data.analysis.bpm !== bpm ? 'DIFFERENT from global!' : 'matches global'})\n`;
+        analysisDataText += `  - Energy: ${data.analysis.energy} (onset density: ${data.analysis.onset_density}/s)\n`;
+        analysisDataText += `  - Volume: ${data.analysis.mean_volume}dB mean, ${data.analysis.max_volume}dB peak\n`;
+      }
+      
+      // Add key timing info
+      analysisDataText += `\nKEY TIMING:\n`;
+      analysisDataText += `- Intro energy: ${fullAnalysis.sections.intro.analysis.energy}\n`;
+      analysisDataText += `- Peak energy: ${findPeakEnergy(fullAnalysis.sections)}\n`;
+      analysisDataText += `- Beat intervals: ${fullAnalysis.beat_grid.beat_intervals.slice(0, 5).join(', ')}...\n`;
+    }
+    
     // Replace placeholders
     let prompt = promptTemplate
       .replace(/{{song}}/g, song)
       .replace(/{{artist}}/g, artist)
       .replace(/{{songStructure}}/g, structureText)
       .replace(/{{lyricsHint}}/g, lyricsHint)
-      .replace(/{{sampleInfo}}/g, sampleInfo);
+      .replace(/{{sampleInfo}}/g, sampleInfo)
+      .replace(/{{analysisData}}/g, analysisDataText)
+      .replace(/{{bpm}}/g, bpm)
+      .replace(/{{duration}}/g, fullAnalysis?.file_info?.duration || '180')
+      .replace(/{{(\w+)Start}}/g, (match, section) => {
+        return fullAnalysis?.sections[section.toLowerCase()]?.start?.toFixed(1) || '0';
+      })
+      .replace(/{{(\w+)End}}/g, (match, section) => {
+        return fullAnalysis?.sections[section.toLowerCase()]?.end?.toFixed(1) || '0';
+      })
+      .replace(/{{(\w+)Energy}}/g, (match, section) => {
+        return fullAnalysis?.sections[section.toLowerCase()]?.analysis?.energy || 'medium';
+      });
     
     // Add error feedback if retrying
     if (errorFeedback) {
