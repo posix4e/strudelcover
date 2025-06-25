@@ -1,0 +1,73 @@
+Create a Strudel pattern for "{{song}}" by {{artist}}.
+
+AUDIO ANALYSIS DATA:
+{{analysisData}}
+
+SONG STRUCTURE WITH TIMING:
+{{songStructure}}
+
+{{lyricsHint}}
+{{sampleInfo}}
+
+IMPORTANT INSTRUCTIONS:
+1. TIMING & TEMPO:
+   - Global BPM is {{bpm}}, but sections vary (see analysis)
+   - Use .slow() to match the exact BPM: .slow({{bpm}}/120)
+   - Adjust tempo per section when BPM changes significantly
+   - Use the beat grid timing for precise rhythm placement
+
+2. SECTION-SPECIFIC PATTERNS:
+   - Each section MUST match its analyzed characteristics
+   - Low energy sections: sparse patterns, fewer layers
+   - High energy sections: full instrumentation, complex rhythms
+   - Match onset density - more onsets = busier patterns
+
+3. DYNAMIC PROGRESSION:
+   - Volume should follow mean_volume analysis per section
+   - Build from {{introEnergy}} energy intro to {{peakEnergy}} peak
+   - Use filters and effects to match energy transitions
+
+4. STRUCTURE IMPLEMENTATION:
+   - Create separate const variables for each section pattern
+   - Use cat() or seq() to arrange the full song timeline
+   - Ensure smooth transitions between sections
+   - Total duration must be ~{{duration}} seconds
+
+5. RHYTHM ACCURACY:
+   - Use beat intervals from analysis for swing/groove
+   - Place kicks/snares according to onset patterns
+   - Maintain consistent timing with .cpm({{bpm}})
+
+EXAMPLE STRUCTURE:
+```
+// Set global tempo
+setcpm({{bpm}})
+
+// Section patterns
+const intro = // ... pattern for {{introStart}}s-{{introEnd}}s
+const verse1 = // ... pattern for {{verse1Start}}s-{{verse1End}}s
+const chorus1 = // ... pattern for {{chorus1Start}}s-{{chorus1End}}s
+// ... more sections
+
+// Full arrangement
+const arrangement = cat([
+  intro.slow(16),  // adjust for section duration
+  verse1.slow(16),
+  chorus1.slow(16),
+  // ... complete timeline
+])
+
+// Play with effects
+arrangement
+  .room(0.5)
+  .delay(0.125)
+```
+
+The pattern should:
+- Match the analyzed BPM and energy levels exactly
+- Use dynamics that follow the volume analysis
+- Create rhythms based on onset patterns
+- Build/release tension according to section energy
+- Be a complete {{duration}}s arrangement
+
+Return ONLY valid Strudel/JavaScript code. No explanations or markdown.

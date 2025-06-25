@@ -9,6 +9,7 @@ git clone git@github.com:posix4e/strudelcover.git
 cd strudelcover
 npm install
 npx playwright install chromium
+brew install aubio ffmpeg
 echo "ANTHROPIC_API_KEY=your-key" > .env
 ```
 
@@ -37,9 +38,11 @@ Real-time updates between server and dashboard for pattern delivery and status u
 ## Running StrudelCover
 
 ```bash
-# Basic usage
-touch song.mp3  # Create dummy audio file
+# Basic usage (requires real audio file)
 npm run cover song.mp3 "Pink Floyd" "Wish You Were Here"
+
+# Pre-analyze audio for faster runs
+npm run analyze song.mp3
 
 # With recording
 npm run cover song.mp3 "Artist" "Song" -- --record-output video.webm
@@ -60,7 +63,13 @@ npm run test:smoke  # Quick validation
 - Dashboard runs on http://localhost:8888
 - Video recording captures visuals only, not audio
 - Ensure ANTHROPIC_API_KEY is set in environment
-- Audio file parameter is required but not actually used (patterns are generated from artist/song names)
+- Real audio file is REQUIRED for BPM and structure analysis
+- Comprehensive audio analysis extracts:
+  - BPM/tempo per section
+  - Energy levels (onset density)
+  - Volume dynamics
+  - Song structure timing
+- Pre-analyze files with `npm run analyze <file>` for faster runs
 
 ## Project Structure
 

@@ -27,24 +27,22 @@ process.on('SIGINT', () => {
 // Main program
 program
   .name('strudelcover')
-  .description('AI-powered tool to recreate songs as Strudel patterns')
+  .description('AI-powered tool to recreate songs as Strudel patterns from audio analysis')
   .version('0.1.0');
 
-// Main command with flexible arguments
+// Main command requires audio file
 program
-  .argument('[input]', 'Audio file path or artist name')
-  .argument('[artistOrSong]', 'Artist name (if audio provided) or song name')
-  .argument('[song]', 'Song name (only if audio file provided)')
+  .argument('<audioFile>', 'Audio file path (MP3, WAV, etc.)')
+  .argument('<artist>', 'Artist name')
+  .argument('<song>', 'Song name')
   .option('-k, --api-key <key>', 'Anthropic API key (or set ANTHROPIC_API_KEY env var)')
   .option('-o, --output <dir>', 'Output directory', './strudelcover-output')
-  .option('-r, --record-output <file>', 'Output file for recording (e.g., output.wav)')
-  .option('--no-audio', 'AI-only mode without audio file analysis')
-  .option('--analyze-audio', 'Enable all audio analysis features (default when MP3 provided)')
+  .option('-r, --record-output <file>', 'Output file for recording (e.g., output.webm)')
   .option('--no-bpm-detection', 'Skip BPM detection from audio')
   .option('--no-sample-extraction', 'Skip sample extraction from audio')
   .option('--no-structure-detection', 'Skip structure detection from audio')
-  .action(async (input, artistOrSong, song, options) => {
-    console.log(chalk.blue.bold('\n🎸 StrudelCover - AI Song Recreation\n'));
+  .action(async (audioFile, artist, song, options) => {
+    console.log(chalk.blue.bold('\n🎸 StrudelCover - AI Song Recreation from Audio\n'));
     
     const spinner = ora('Initializing...').start();
     
@@ -57,134 +55,123 @@ program
         process.exit(1);
       }
       
-      // Parse arguments flexibly
-      let audioFile = null;
-      let artist = null;
-      let songName = null;
-      
-      if (!input) {
-        spinner.fail('Please provide at least artist and song name');
+      // Validate audio file exists
+      if (!existsSync(audioFile)) {
+        spinner.fail(`Audio file not found: ${audioFile}`);
         console.log(chalk.gray('\nUsage:'));
-        console.log(chalk.gray('  strudelcover "Artist" "Song"                    # AI-only mode'));
-        console.log(chalk.gray('  strudelcover audio.mp3 "Artist" "Song"          # With audio analysis'));
+        console.log(chalk.gray('  strudelcover <audio.mp3> "Artist" "Song"'));
+        console.log(chalk.gray('\nExample:'));
+        console.log(chalk.gray('  strudelcover song.mp3 "Pink Floyd" "Wish You Were Here"'));
         process.exit(1);
       }
       
-      // Determine argument pattern
-      if (song) {
-        // Three arguments: audioFile artist song
-        if (existsSync(input)) {
-          audioFile = input;
-          artist = artistOrSong;
-          songName = song;
-        } else {
-          spinner.fail(`Audio file "${input}" not found`);
-          process.exit(1);
-        }
-      } else if (artistOrSong) {
-        // Two arguments: could be "artist song" or "audioFile artist"
-        if (existsSync(input) && !options.noAudio) {
-          // First arg is a file that exists
-          spinner.fail('When providing audio file, please specify both artist and song');
-          console.log(chalk.gray('Usage: strudelcover audio.mp3 "Artist" "Song"'));
-          process.exit(1);
-        } else {
-          // AI-only mode: artist song
-          artist = input;
-          songName = artistOrSong;
-        }
-      } else {
-        spinner.fail('Please provide both artist and song name');
+      // Validate file is audio
+      const validExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac'];
+      const fileExt = audioFile.toLowerCase().substring(audioFile.lastIndexOf('.'));
+      if (!validExtensions.includes(fileExt)) {
+        spinner.fail(`Invalid audio file format: ${fileExt}`);
+        console.log(chalk.gray(`\nSupported formats: ${validExtensions.join(', ')}`));
         process.exit(1);
       }
       
-      // Log mode
-      if (audioFile && !options.noAudio) {
-        console.log(chalk.green(`\n🎵 Audio file: ${audioFile}`));
-        if (options.analyzeAudio !== false) {
-          console.log(chalk.gray('Audio analysis: Enabled (use --no-audio to disable)'));
+      // Log inputs
+      console.log(chalk.green(`\n🎵 Audio file: ${audioFile}`));
+      console.log(chalk.blue(`🎤 Artist: ${artist}`));
+      console.log(chalk.blue(`🎶 Song: ${song}`));
+      
+      // Check for pre-analyzed data or run analysis
+      const analysisFile = `${audioFile}.analysis.json`;
+      if (!existsSync(analysisFile)) {
+        spinner.text = 'Running comprehensive audio analysis...';
+        console.log(chalk.yellow('\n⚠ No analysis file found. Running aubio analysis...'));
+        console.log(chalk.gray('This may take a moment for long audio files...\n'));
+        
+        try {
+          const { execSync } = await import('child_process');
+          execSync(`./scripts/analyze-with-aubio.sh "${audioFile}"`, { stdio: 'inherit' });
+          console.log(chalk.green('\n✓ Audio analysis complete!'));
+        } catch (error) {
+          spinner.fail('Audio analysis failed');
+          console.log(chalk.red('\nError: Could not analyze audio file'));
+          console.log(chalk.gray('Make sure aubio is installed: brew install aubio'));
+          console.log(chalk.gray('Or pre-analyze with: npm run analyze "' + audioFile + '"'));
+          process.exit(1);
         }
       } else {
-        console.log(chalk.yellow('\n🤖 AI-only mode (no audio analysis)'));
+        console.log(chalk.green('✓ Pre-analyzed data found'));
       }
       
       spinner.succeed('Ready to create cover!');
       
-      // Create StrudelCover instance
+      // Create StrudelCover instance with audio analysis always enabled
       const coverOptions = {
         apiKey,
         outputDir: options.output,
         audioAnalysis: {
-          enabled: audioFile && !options.noAudio,
+          enabled: true,
           bpmDetection: options.bpmDetection !== false,
           sampleExtraction: options.sampleExtraction !== false,
           structureDetection: options.structureDetection !== false
         }
       };
       
-      const cover = new StrudelCover(coverOptions);
+      if (options.recordOutput) {
+        coverOptions.recordOutput = options.recordOutput;
+      }
       
-      // Generate cover with recording options
-      const coverGenerationOptions = {
-        recordOutput: options.recordOutput
-      };
-      await cover.cover(audioFile, artist, songName, coverGenerationOptions);
+      const strudelCover = new StrudelCover(coverOptions);
       
-      // Keep the process running
-      console.log(chalk.cyan('\n📊 Dashboard is running. Press Ctrl+C to exit.\n'));
+      console.log(chalk.blue('\nStarting pattern generation...\n'));
+      
+      const result = await strudelCover.cover(
+        audioFile,
+        artist,
+        song
+      );
+      
+      if (result.success) {
+        console.log(chalk.green.bold('\n✨ Pattern generation complete!'));
+        console.log(chalk.gray(`\nDashboard: ${result.dashboardUrl}`));
+        console.log(chalk.gray('Pattern is playing in the browser'));
+        console.log(chalk.gray('\nPress Ctrl+C to stop'));
+        
+        // Keep the process alive
+        await new Promise(() => {});
+      } else {
+        console.error(chalk.red('\n❌ Pattern generation failed'));
+        process.exit(1);
+      }
       
     } catch (error) {
-      spinner.fail('Cover generation failed');
-      console.error(chalk.red('Error:'), error.message);
-      console.error(chalk.gray(error.stack));
+      spinner.fail('An error occurred');
+      console.error(chalk.red(error.message));
       process.exit(1);
     }
   });
 
-// Add examples to help
-program.on('--help', () => {
-  console.log('');
-  console.log('Usage:');
-  console.log('  strudelcover [audio] <artist> <song> [options]');
-  console.log('');
-  console.log('Examples:');
-  console.log('  # AI-only mode (no audio file)');
-  console.log('  $ strudelcover "The Beatles" "Hey Jude"');
-  console.log('');
-  console.log('  # With audio analysis');
-  console.log('  $ strudelcover song.mp3 "The Beatles" "Hey Jude"');
-  console.log('');
-  console.log('  # Disable audio analysis even with MP3');
-  console.log('  $ strudelcover song.mp3 "Artist" "Song" --no-audio');
-  console.log('');
-  console.log('  # Custom output directory');
-  console.log('  $ strudelcover "Artist" "Song" --output ./my-covers');
-  console.log('');
-  console.log('  # Record the output');
-  console.log('  $ strudelcover "Artist" "Song" --record-output cover.wav');
-  console.log('');
-  console.log('  # Skip specific audio features');
-  console.log('  $ strudelcover audio.mp3 "Artist" "Song" --no-sample-extraction');
-  console.log('');
-  console.log('Features:');
-  console.log('  - AI-only mode by default (just provide artist and song)');
-  console.log('  - Optional audio analysis when MP3 provided');
-  console.log('  - BPM detection from audio (when available)');
-  console.log('  - Sample extraction for use in patterns');
-  console.log('  - Song structure detection from waveform');
-  console.log('  - Dashboard on http://localhost:8888');
-  console.log('  - Pattern generation using Claude Opus 4');
-  console.log('  - Automatic playback with Playwright');
-  console.log('  - Audio recording of generated patterns');
-  console.log('');
-  console.log('Audio Analysis Options:');
-  console.log('  --no-audio              Disable all audio analysis');
-  console.log('  --no-bpm-detection      Skip tempo analysis');
-  console.log('  --no-sample-extraction  Skip sample extraction');
-  console.log('  --no-structure-detection Skip structure analysis');
-  console.log('');
-  console.log('Environment Variables:');
-  console.log('  ANTHROPIC_API_KEY     Anthropic API key (required)');
-});
+program.addHelpText('after', `
+${chalk.bold('Examples:')}
+  $ strudelcover song.mp3 "The Beatles" "Hey Jude"
+  $ strudelcover track.wav "Pink Floyd" "Comfortably Numb"
+  $ strudelcover audio.m4a "Daft Punk" "One More Time" --record-output video.webm
+
+${chalk.bold('Audio Analysis:')}
+  StrudelCover requires an audio file to analyze BPM, structure, and musical features.
+  The analysis creates patterns that match your source audio's tempo and sections.
+  
+  Pre-analyze audio files with:
+  $ npm run analyze song.mp3
+  
+  Or let StrudelCover analyze automatically when you run it.
+
+${chalk.bold('Requirements:')}
+  - Audio file (MP3, WAV, M4A, FLAC, OGG, AAC)
+  - Anthropic API key
+  - aubio (install with: brew install aubio)
+  - ffmpeg (install with: brew install ffmpeg)
+
+${chalk.bold('Environment Variables:')}
+  ANTHROPIC_API_KEY     Anthropic API key (required)
+`);
 
 program.parse();
