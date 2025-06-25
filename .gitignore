@@ -7,3 +7,30 @@ playwright-report/
 test-output.wav
 *.log
 last-pattern.js
+node_modules/
+.DS_Store
+strudelcover-output/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+*.egg-info/
+
+# ML outputs
+*_stems/
+*.transcribed.mid
+*.ml_analysis.json
+*.combined_analysis.json
+*.aubio_analysis.json
+activate-ml.sh
+
+# Analysis outputs
+*.analysis.json
+!examples/*.json
