@@ -3,13 +3,14 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { chromium } from 'playwright';
 import Anthropic from '@anthropic-ai/sdk';
-import { promises as fs, createReadStream } from 'fs';
+import { promises as fs, createReadStream, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getSongStructure, estimateBPM, formatSongStructure, getLyricsHint } from './lyrics.js';
 import { analyzeAudio } from './audio-analyzer.js';
+import { analyzeWithML } from './ml-analyzer.js';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -163,13 +164,30 @@ export class Dazzle {
       this.retryCount = 0;
     }
 
+    // Get song structure and BPM
+    const songStructureResult = await getSongStructure(artist, song, audioFile);
+    const songStructure = songStructureResult.structure;
+    const fullAnalysis = songStructureResult.fullAnalysis;
+    let bpm = await estimateBPM(artist, song, audioFile) || 120;
+    
     // Audio analysis
     let audioData = null;
-    let bpm = estimateBPM(artist, song);
-    const songStructure = await getSongStructure(artist, song);
+    let mlAnalysis = null;
     
     if (audioFile && this.audioAnalysis.enabled) {
       console.log(chalk.gray(`Audio file: ${audioFile}`));
+      
+      // Check if ML analysis exists
+      const mlAnalysisFile = `${audioFile}.fancy_analysis.json`;
+      if (existsSync(mlAnalysisFile)) {
+        try {
+          mlAnalysis = JSON.parse(await fs.readFile(mlAnalysisFile, 'utf8'));
+          console.log(chalk.magenta('\n🎩 Using fancy ML analysis'));
+        } catch (e) {
+          console.log(chalk.gray('ML analysis file exists but could not be loaded'));
+        }
+      }
+      
       try {
         audioData = await analyzeAudio(audioFile, artist, song, this.audioAnalysis);
         this.audioData = audioData;
@@ -210,9 +228,24 @@ export class Dazzle {
     console.log(chalk.blue('\n🎵 Song structure analysis:'));
     console.log(chalk.gray(structureText));
     
-    // Load prompt template
+    // If we have full analysis data, let's show it
+    if (fullAnalysis && fullAnalysis.sections) {
+      console.log(chalk.blue('\n📊 Detailed audio analysis:'));
+      Object.entries(fullAnalysis.sections).forEach(([sectionName, data]) => {
+        if (data.bpm && data.energy_level) {
+          console.log(chalk.gray(`  ${sectionName}:`));
+          console.log(chalk.gray(`    - BPM: ${data.bpm}`));
+          console.log(chalk.gray(`    - Energy: ${data.energy_level}%`));
+          console.log(chalk.gray(`    - Volume: ${data.volume_peak}dB / ${data.volume_mean}dB (peak/mean)`));
+        }
+      });
+    }
+    
+    // Load prompt template - use ML template if we have ML analysis
+    const templateFile = mlAnalysis ? 'pattern-prompt-ml.txt' : 
+      (fullAnalysis ? 'pattern-prompt-comprehensive.txt' : 'pattern-prompt.txt');
     const promptTemplate = await fs.readFile(
-      join(__dirname, 'templates', 'pattern-prompt.txt'), 
+      join(__dirname, 'templates', templateFile), 
       'utf-8'
     );
     
@@ -227,13 +260,47 @@ export class Dazzle {
       sampleInfo += '\nIncorporate these custom samples into your pattern for authenticity.\n';
     }
     
+    // Add ML analysis info
+    let mlInfo = '';
+    if (mlAnalysis) {
+      mlInfo = '\n\nML Analysis Results:\n';
+      
+      if (mlAnalysis.analyses?.source_separation?.success) {
+        mlInfo += '\n**Source Separation (stems available):**\n';
+        const stems = mlAnalysis.analyses.source_separation.stems;
+        Object.entries(stems).forEach(([stem, path]) => {
+          mlInfo += `- ${stem}: Available as separated audio\n`;
+        });
+      }
+      
+      if (mlAnalysis.analyses?.transcription?.success) {
+        const trans = mlAnalysis.analyses.transcription;
+        mlInfo += `\n**MIDI Transcription:**\n`;
+        mlInfo += `- ${trans.note_count} notes detected\n`;
+        mlInfo += `- MIDI file: ${trans.midi_file}\n`;
+        if (trans.first_notes && trans.first_notes.length > 0) {
+          mlInfo += `- First few notes: ${trans.first_notes.slice(0, 5).map(n => `${n.pitch}`).join(', ')}\n`;
+        }
+      }
+      
+      if (mlAnalysis.analyses?.advanced_features?.success) {
+        const feat = mlAnalysis.analyses.advanced_features;
+        mlInfo += `\n**Advanced Features:**\n`;
+        mlInfo += `- ML-detected tempo: ${feat.tempo} BPM\n`;
+        mlInfo += `- Estimated key: ${['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][feat.estimated_key]}\n`;
+        mlInfo += `- ${feat.section_count} sections detected\n`;
+      }
+    }
+    
     // Replace placeholders
     let prompt = promptTemplate
       .replace(/{{song}}/g, song)
       .replace(/{{artist}}/g, artist)
       .replace(/{{songStructure}}/g, structureText)
       .replace(/{{lyricsHint}}/g, lyricsHint)
-      .replace(/{{sampleInfo}}/g, sampleInfo);
+      .replace(/{{sampleInfo}}/g, sampleInfo)
+      .replace(/{{mlInfo}}/g, mlInfo || '')
+      .replace(/{{fullAnalysis}}/g, JSON.stringify(fullAnalysis || {}, null, 2));
     
     // Add error feedback if retrying
     if (errorFeedback) {

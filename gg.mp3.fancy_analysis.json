@@ -1,0 +1,18 @@
+{
+  "audio_file": "gg.mp3",
+  "fancy_mode": true,
+  "analyses": {
+    "source_separation": {
+      "success": false,
+      "error": "No module named 'demucs'"
+    },
+    "transcription": {
+      "success": false,
+      "error": "No module named 'basic_pitch'"
+    },
+    "advanced_features": {
+      "success": false,
+      "error": "No module named 'librosa'"
+    }
+  }
+}

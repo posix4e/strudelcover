@@ -9,6 +9,7 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { spawn } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,6 +44,7 @@ program
   .option('--no-bpm-detection', 'Skip BPM detection from audio')
   .option('--no-sample-extraction', 'Skip sample extraction from audio')
   .option('--no-structure-detection', 'Skip structure detection from audio')
+  .option('--fancy-ml', 'Enable fancy ML analysis (source separation, transcription)')
   .action(async (input, artistOrSong, song, options) => {
     console.log(chalk.blue.bold('\n🎸 StrudelCover - AI Song Recreation\n'));
     
@@ -82,30 +84,61 @@ program
           process.exit(1);
         }
       } else if (artistOrSong) {
-        // Two arguments: could be "artist song" or "audioFile artist"
-        if (existsSync(input) && !options.noAudio) {
-          // First arg is a file that exists
-          spinner.fail('When providing audio file, please specify both artist and song');
-          console.log(chalk.gray('Usage: strudelcover audio.mp3 "Artist" "Song"'));
-          process.exit(1);
-        } else {
-          // AI-only mode: artist song
-          artist = input;
-          songName = artistOrSong;
-        }
+        // Two arguments: must be artist and song
+        // Audio file is now required, so this is an error
+        spinner.fail('Audio file is required');
+        console.log(chalk.gray('Usage: strudelcover audio.mp3 "Artist" "Song"'));
+        process.exit(1);
       } else {
-        spinner.fail('Please provide both artist and song name');
+        spinner.fail('Please provide audio file, artist and song name');
+        console.log(chalk.gray('Usage: strudelcover audio.mp3 "Artist" "Song"'));
         process.exit(1);
       }
       
-      // Log mode
-      if (audioFile && !options.noAudio) {
-        console.log(chalk.green(`\n🎵 Audio file: ${audioFile}`));
-        if (options.analyzeAudio !== false) {
-          console.log(chalk.gray('Audio analysis: Enabled (use --no-audio to disable)'));
+      // Audio file is required
+      if (!audioFile) {
+        spinner.fail('Audio file is required');
+        process.exit(1);
+      }
+      
+      console.log(chalk.green(`\n🎵 Audio file: ${audioFile}`));
+      
+      // Run aubio analysis if no existing analysis
+      const analysisFile = audioFile.replace(/\.[^.]+$/, '.analysis.json');
+      if (!existsSync(analysisFile)) {
+        spinner.text = 'Running audio analysis with aubio...';
+        try {
+          const analyzeScript = resolve(__dirname, '../scripts/analyze-with-aubio.sh');
+          await new Promise((resolve, reject) => {
+            const proc = spawn('bash', [analyzeScript, audioFile]);
+            proc.on('close', (code) => {
+              if (code === 0) resolve();
+              else reject(new Error(`Analysis failed with code ${code}`));
+            });
+          });
+          spinner.succeed('Audio analysis complete');
+        } catch (error) {
+          spinner.warn('Audio analysis failed, continuing without it');
         }
       } else {
-        console.log(chalk.yellow('\n🤖 AI-only mode (no audio analysis)'));
+        console.log(chalk.gray('Using existing analysis: ' + analysisFile));
+      }
+      
+      // Run fancy ML analysis if requested
+      if (options.fancyMl) {
+        spinner.text = 'Running fancy ML analysis...';
+        try {
+          const { analyzeWithML } = await import('./ml-analyzer.js');
+          const mlResults = await analyzeWithML(audioFile, { fancy: true });
+          if (mlResults) {
+            spinner.succeed('Fancy ML analysis complete');
+          } else {
+            spinner.warn('ML analysis incomplete, continuing with basic analysis');
+          }
+        } catch (error) {
+          spinner.warn('ML analysis not available: ' + error.message);
+          console.log(chalk.gray('Install with: pip install torch librosa demucs basic-pitch'));
+        }
       }
       
       spinner.succeed('Ready to create cover!');
@@ -148,14 +181,11 @@ program.on('--help', () => {
   console.log('  strudelcover [audio] <artist> <song> [options]');
   console.log('');
   console.log('Examples:');
-  console.log('  # AI-only mode (no audio file)');
-  console.log('  $ strudelcover "The Beatles" "Hey Jude"');
-  console.log('');
-  console.log('  # With audio analysis');
+  console.log('  # Basic usage with audio analysis');
   console.log('  $ strudelcover song.mp3 "The Beatles" "Hey Jude"');
   console.log('');
-  console.log('  # Disable audio analysis even with MP3');
-  console.log('  $ strudelcover song.mp3 "Artist" "Song" --no-audio');
+  console.log('  # With fancy ML analysis');
+  console.log('  $ strudelcover song.mp3 "The Beatles" "Hey Jude" --fancy-ml');
   console.log('');
   console.log('  # Custom output directory');
   console.log('  $ strudelcover "Artist" "Song" --output ./my-covers');
@@ -167,8 +197,8 @@ program.on('--help', () => {
   console.log('  $ strudelcover audio.mp3 "Artist" "Song" --no-sample-extraction');
   console.log('');
   console.log('Features:');
-  console.log('  - AI-only mode by default (just provide artist and song)');
-  console.log('  - Optional audio analysis when MP3 provided');
+  console.log('  - Audio analysis with aubio (automatic)');
+  console.log('  - Optional ML analysis for source separation and transcription');
   console.log('  - BPM detection from audio (when available)');
   console.log('  - Sample extraction for use in patterns');
   console.log('  - Song structure detection from waveform');
@@ -182,6 +212,7 @@ program.on('--help', () => {
   console.log('  --no-bpm-detection      Skip tempo analysis');
   console.log('  --no-sample-extraction  Skip sample extraction');
   console.log('  --no-structure-detection Skip structure analysis');
+  console.log('  --fancy-ml              Enable ML-based source separation and transcription');
   console.log('');
   console.log('Environment Variables:');
   console.log('  ANTHROPIC_API_KEY     Anthropic API key (required)');

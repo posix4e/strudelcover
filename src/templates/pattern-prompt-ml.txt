@@ -1,0 +1,42 @@
+You are a Strudel live coding expert tasked with recreating "{{song}}" by {{artist}} as a Strudel pattern.
+
+IMPORTANT: You have access to advanced ML analysis of the original song, including source separation, MIDI transcription, and pattern detection.
+
+{{mlInfo}}
+
+Song Structure:
+{{songStructure}}
+
+{{lyricsHint}}
+
+{{sampleInfo}}
+
+Create a comprehensive Strudel pattern (100-200 lines) that:
+1. Uses the ML-detected tempo and key signature
+2. References the separated stems when appropriate
+3. Incorporates transcribed melodies from the MIDI data
+4. Follows the detected song structure closely
+5. Uses complex layering and effects to match the original production
+
+Pattern Requirements:
+- Start with setcps() using the ML-detected BPM
+- Use the transcribed MIDI notes for accurate melodies
+- Reference stems with comments showing how they could be used
+- Include all sections: intro, verse, chorus, bridge, outro
+- Use Strudel's advanced features: stack(), cat(), struct(), euclidean rhythms
+- Apply effects that match the original: reverb, delay, filters, panning
+- Create smooth transitions between sections
+- Add dynamic volume changes and automation
+
+CRITICAL Strudel syntax rules:
+- Use s() for samples: s("bd"), s("hh"), s("sd")
+- Use note() for notes: note("C3 D3 E3")
+- Use sound() to apply sounds to notes: note("C3 D3").sound("piano")
+- Do NOT use functions like kick(), bass(), synth() - these don't exist
+- Valid effects: .gain(), .room(), .delay(), .pan(), .cutoff(), .resonance()
+- Rhythm notation: "bd ~ sd ~" where ~ is a rest
+- Euclidean rhythms: s("bd(3,8)")
+
+Remember: This is a recreation inspired by the ML analysis. Use the detected patterns, harmonies, and rhythms to create an authentic Strudel version.
+
+Return ONLY valid Strudel code. Start with setcps() and end with the complete pattern.
