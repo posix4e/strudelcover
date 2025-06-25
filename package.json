@@ -8,12 +8,8 @@
     "strudelcover": "./src/cli.js"
   },
   "scripts": {
-    "test": "npm run test:unit && npm run test:integration && npm run test:e2e",
-    "test:unit": "node --test test/unit/*.test.js",
-    "test:integration": "node --test test/integration/*.test.js",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
-    "test:smoke": "node test/smoke.test.js",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
     "cover": "node src/cli.js",
     "lint": "eslint src/**/*.js",
     "lint:fix": "eslint src/**/*.js --fix"
