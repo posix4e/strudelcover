@@ -15,6 +15,13 @@ npm install
 # Install Playwright browser
 npx playwright install chromium
 
+# Install audio analysis tools
+brew install aubio ffmpeg
+
+# (Optional) Set up ML analysis
+brew install pyenv  # If not installed
+npm run setup:ml    # Sets up Python environment with ML models
+
 # Set up API key (choose one method)
 echo "ANTHROPIC_API_KEY=your-api-key-here" > .env
 # OR
@@ -24,16 +31,21 @@ export ANTHROPIC_API_KEY=your-api-key-here
 ## Quick Start
 
 ```bash
-# Create dummy audio file (required but not used)
-touch song.mp3
+# Basic usage with aubio analysis
+npm run cover song.mp3 "Artist" "Song Title"
 
-# Generate a pattern
+# With ML analysis (after setup)
+npm run analyze:full song.mp3
 npm run cover song.mp3 "Artist" "Song Title"
 ```
 
 ## What it does
 
-- Generates musical patterns from song descriptions using Claude AI
+- Analyzes audio files using aubio and ML models
+- Separates audio into stems (drums, bass, vocals, other)
+- Transcribes audio to MIDI
+- Extracts musical patterns and structure
+- Generates Strudel patterns matching the original song
 - Plays patterns in real-time through Strudel.cc
 - Shows live audio visualization
 - Optionally records the visual output
