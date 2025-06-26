@@ -11,8 +11,11 @@
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "cover": "node src/cli.js",
-    "lint": "eslint src/**/*.js",
-    "lint:fix": "eslint src/**/*.js --fix"
+    "analyze": "./scripts/analyze-with-aubio.sh",
+    "analyze:ml": "source venv/bin/activate && python scripts/analyze-with-ml.py",
+    "analyze:full": "./scripts/analyze-comprehensive.sh",
+    "lint": "eslint 'src/**/*.js'",
+    "lint:fix": "eslint 'src/**/*.js' --fix"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.9",

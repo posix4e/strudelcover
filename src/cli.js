@@ -9,6 +9,7 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { spawn } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -82,30 +83,85 @@ program
           process.exit(1);
         }
       } else if (artistOrSong) {
-        // Two arguments: could be "artist song" or "audioFile artist"
-        if (existsSync(input) && !options.noAudio) {
-          // First arg is a file that exists
-          spinner.fail('When providing audio file, please specify both artist and song');
-          console.log(chalk.gray('Usage: strudelcover audio.mp3 "Artist" "Song"'));
-          process.exit(1);
-        } else {
-          // AI-only mode: artist song
-          artist = input;
-          songName = artistOrSong;
-        }
+        // Two arguments: must be artist and song
+        // Audio file is now required, so this is an error
+        spinner.fail('Audio file is required');
+        console.log(chalk.gray('Usage: strudelcover audio.mp3 "Artist" "Song"'));
+        process.exit(1);
       } else {
-        spinner.fail('Please provide both artist and song name');
+        spinner.fail('Please provide audio file, artist and song name');
+        console.log(chalk.gray('Usage: strudelcover audio.mp3 "Artist" "Song"'));
         process.exit(1);
       }
       
-      // Log mode
-      if (audioFile && !options.noAudio) {
-        console.log(chalk.green(`\n🎵 Audio file: ${audioFile}`));
-        if (options.analyzeAudio !== false) {
-          console.log(chalk.gray('Audio analysis: Enabled (use --no-audio to disable)'));
+      // Audio file is required
+      if (!audioFile) {
+        spinner.fail('Audio file is required');
+        process.exit(1);
+      }
+      
+      console.log(chalk.green(`\n🎵 Audio file: ${audioFile}`));
+      
+      // Run basic audio analysis if no existing analysis
+      const analysisFile = audioFile.replace(/\.[^.]+$/, '.analysis.json');
+      if (!existsSync(analysisFile) && existsSync(resolve(__dirname, '../scripts/analyze-with-aubio.sh'))) {
+        spinner.text = 'Running audio analysis...';
+        try {
+          const analyzeScript = resolve(__dirname, '../scripts/analyze-with-aubio.sh');
+          await new Promise((resolve, reject) => {
+            const proc = spawn('bash', [analyzeScript, audioFile]);
+            proc.on('close', code => {
+              if (code === 0) {resolve();}
+              else {reject(new Error(`Analysis failed with code ${code}`));}
+            });
+          });
+          spinner.succeed('Audio analysis complete');
+        } catch (error) {
+          spinner.warn('Audio analysis failed, continuing without it');
         }
-      } else {
-        console.log(chalk.yellow('\n🤖 AI-only mode (no audio analysis)'));
+      } else if (existsSync(analysisFile)) {
+        console.log(chalk.gray('Using existing analysis: ' + analysisFile));
+      }
+      
+      // ML analysis is required for realistic music generation
+      spinner.text = 'Checking ML dependencies...';
+      try {
+        const { analyzeWithML, MLAnalyzer } = await import('./ml-analyzer.js');
+        
+        // Check dependencies first
+        const analyzer = new MLAnalyzer();
+        const depsAvailable = await analyzer.checkDependencies();
+        
+        if (!depsAvailable) {
+          spinner.fail('ML dependencies not installed');
+          console.log(chalk.red('\n❌ ML analysis is required for realistic music generation'));
+          console.log(chalk.yellow('\nPlease install the required dependencies:'));
+          console.log(chalk.cyan('  # Create and activate a virtual environment'));
+          console.log(chalk.cyan('  python3 -m venv venv'));
+          console.log(chalk.cyan('  source venv/bin/activate  # On Windows: venv\\Scripts\\activate'));
+          console.log(chalk.cyan('  pip install -r requirements.txt'));
+          process.exit(1);
+        }
+        
+        spinner.text = 'Running ML analysis...';
+        const mlResults = await analyzeWithML(audioFile, { fancy: true });
+        if (!mlResults) {
+          spinner.fail('ML analysis failed');
+          console.log(chalk.red('\n❌ Could not complete ML analysis'));
+          console.log(chalk.yellow('Please check your Python environment and try again'));
+          process.exit(1);
+        }
+        
+        spinner.succeed('ML analysis complete');
+        console.log(chalk.green('✓ Source separation, MIDI transcription, and advanced features ready'));
+      } catch (error) {
+        spinner.fail('ML analysis error');
+        console.log(chalk.red('\n❌ ML analysis failed:', error.message));
+        console.log(chalk.yellow('\nPlease install dependencies in a virtual environment:'));
+        console.log(chalk.cyan('  python3 -m venv venv'));
+        console.log(chalk.cyan('  source venv/bin/activate'));
+        console.log(chalk.cyan('  pip install -r requirements.txt'));
+        process.exit(1);
       }
       
       spinner.succeed('Ready to create cover!');
@@ -148,14 +204,11 @@ program.on('--help', () => {
   console.log('  strudelcover [audio] <artist> <song> [options]');
   console.log('');
   console.log('Examples:');
-  console.log('  # AI-only mode (no audio file)');
-  console.log('  $ strudelcover "The Beatles" "Hey Jude"');
-  console.log('');
-  console.log('  # With audio analysis');
+  console.log('  # Basic usage with audio analysis');
   console.log('  $ strudelcover song.mp3 "The Beatles" "Hey Jude"');
   console.log('');
-  console.log('  # Disable audio analysis even with MP3');
-  console.log('  $ strudelcover song.mp3 "Artist" "Song" --no-audio');
+  console.log('  # ML analysis is always enabled');
+  console.log('  $ strudelcover song.mp3 "The Beatles" "Hey Jude"');
   console.log('');
   console.log('  # Custom output directory');
   console.log('  $ strudelcover "Artist" "Song" --output ./my-covers');
@@ -167,8 +220,8 @@ program.on('--help', () => {
   console.log('  $ strudelcover audio.mp3 "Artist" "Song" --no-sample-extraction');
   console.log('');
   console.log('Features:');
-  console.log('  - AI-only mode by default (just provide artist and song)');
-  console.log('  - Optional audio analysis when MP3 provided');
+  console.log('  - Audio analysis with aubio (automatic)');
+  console.log('  - ML analysis for source separation and transcription (required)');
   console.log('  - BPM detection from audio (when available)');
   console.log('  - Sample extraction for use in patterns');
   console.log('  - Song structure detection from waveform');

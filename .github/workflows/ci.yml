@@ -25,11 +25,34 @@ jobs:
         node-version: '20'
         cache: 'npm'
     
-    - name: Install dependencies
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install Node dependencies
       run: npm ci
+    
+    - name: Install Python dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+        pip install black flake8
     
     - name: Run ESLint
       run: npm run lint
+    
+    - name: Run Black (Python formatter)
+      run: |
+        source venv/bin/activate
+        black --check src/templates/python/*.py
+    
+    - name: Run Flake8 (Python linter)
+      run: |
+        source venv/bin/activate
+        flake8 src/templates/python/*.py --max-line-length=88 --extend-ignore=E203,E722,F401
     
     - name: Install Playwright
       run: npx playwright install --with-deps chromium
@@ -40,7 +63,10 @@ jobs:
     - name: Run Tests
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      run: npm test
+        PATH: ./venv/bin:$PATH
+      run: |
+        source venv/bin/activate
+        npm test
     
     - name: Upload Test Results
       uses: actions/upload-artifact@v4

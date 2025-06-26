@@ -4,11 +4,38 @@ import chalk from 'chalk';
  * Get song structure and timing information
  * This is a simplified version - in production you'd use a real API
  */
-export async function getSongStructure(artist, song) {
+export async function getSongStructure(artist, song, audioFile) {
   console.log(chalk.blue(`\n🎼 Analyzing song structure for "${song}" by ${artist}`));
   
+  if (audioFile) {
+    console.log(chalk.gray(`Audio file: ${audioFile}`));
+  }
+  
+  // Check for pre-analyzed data from aubio or ML
+  let fullAnalysis = null;
+  if (audioFile) {
+    const analysisFiles = [
+      `${audioFile}.analysis.json`,
+      audioFile.replace(/\.[^.]+$/, '.analysis.json'),
+      './song.analysis.json'
+    ];
+    
+    for (const file of analysisFiles) {
+      try {
+        const fs = await import('fs');
+        if (fs.existsSync(file)) {
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          fullAnalysis = data;
+          console.log(chalk.green(`Loaded analysis from ${file}`));
+          break;
+        }
+      } catch (e) {
+        // Continue to next file
+      }
+    }
+  }
+  
   // Common song structures with approximate timings
-  // In a real implementation, this would fetch from an API
   const commonStructures = {
     'pop': {
       intro: { start: 0, duration: 8, description: 'Instrumental intro, establish mood' },
@@ -45,36 +72,61 @@ export async function getSongStructure(artist, song) {
     }
   };
   
-  // Try to guess genre based on artist (in production, use a real API)
+  // Grimes would be electronic
   let structure = commonStructures.pop; // default
   
-  // Some hardcoded examples
-  if (artist.toLowerCase().includes('pink floyd') || artist.toLowerCase().includes('genesis')) {
-    structure = commonStructures.rock;
-  } else if (artist.toLowerCase().includes('daft punk') || artist.toLowerCase().includes('deadmau5')) {
+  const artistLower = artist.toLowerCase();
+  if (artistLower.includes('grimes') || artistLower.includes('daft punk') || artistLower.includes('deadmau5')) {
     structure = commonStructures.electronic;
+  } else if (artistLower.includes('pink floyd')) {
+    structure = commonStructures.rock;
   }
   
-  return structure;
+  return {
+    structure,
+    fullAnalysis
+  };
 }
 
 /**
  * Get approximate BPM for a song
  */
-export function estimateBPM(artist, song) {
-  // In production, use a real API like Spotify's audio features
-  // For now, return reasonable defaults based on genre
+export async function estimateBPM(artist, song, audioFile) {
+  // Check for pre-analyzed BPM first
+  if (audioFile) {
+    const analysisFiles = [
+      `${audioFile}.analysis.json`,
+      audioFile.replace(/\.[^.]+$/, '.analysis.json'),
+      './song.analysis.json'
+    ];
+    
+    for (const file of analysisFiles) {
+      try {
+        const fs = await import('fs');
+        if (fs.existsSync(file)) {
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (data.bpm) {
+            console.log(chalk.green(`Using analyzed BPM: ${data.bpm}`));
+            return data.bpm;
+          }
+        }
+      } catch (e) {
+        // Continue to next file
+      }
+    }
+  }
   
+  // Fallback to genre-based estimation
   const artistLower = artist.toLowerCase();
   const songLower = song.toLowerCase();
   
   // Electronic/Dance
-  if (artistLower.includes('daft punk') || artistLower.includes('deadmau5')) {
+  if (artistLower.includes('grimes') || artistLower.includes('daft punk') || artistLower.includes('deadmau5')) {
     return 128;
   }
   
   // Rock
-  if (artistLower.includes('pink floyd') || artistLower.includes('genesis')) {
+  if (artistLower.includes('pink floyd')) {
     return 120;
   }
   
