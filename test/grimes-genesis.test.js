@@ -30,18 +30,23 @@ test.describe.serial('Grimes Genesis E2E Test', () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
   });
 
-  test('should generate pattern for Grimes Genesis without mp3', async ({ page }) => {
+  test('should generate pattern for Grimes Genesis with genesis.mp3', async ({ page }) => {
     const audioOutputFile = path.join(__dirname, 'genesis-no-mp3.wav');
+    const audioFile = path.join(__dirname, 'genesis.mp3');
     
-    // Start the CLI process with audio recording but no input mp3
+    // Start the CLI process with audio recording and test mp3
     const cliPath = path.join(__dirname, '..', 'src', 'cli.js');
     const strudelProcess = spawn('node', [
       cliPath,
-      'Grimes',  // Artist as first argument
-      'Genesis', // Song as second argument
+      audioFile,
+      'Grimes',  // Artist as second argument
+      'Genesis', // Song as third argument
       '--record-output', audioOutputFile
     ], {
-      env: { ...process.env },
+      env: { 
+        ...process.env,
+        PATH: `${path.join(path.dirname(__dirname), 'venv', 'bin')}:${process.env.PATH}`
+      },
       cwd: path.dirname(__dirname)
     });
 
@@ -50,13 +55,33 @@ test.describe.serial('Grimes Genesis E2E Test', () => {
       output += data.toString();
     });
 
+    let errorOutput = '';
     strudelProcess.stderr.on('data', (data) => {
-      console.error('Error:', data.toString());
+      const error = data.toString();
+      errorOutput += error;
+      console.error('Error:', error);
+    });
+    
+    strudelProcess.on('exit', (code) => {
+      if (code !== 0) {
+        console.error(`Process exited with code ${code}`);
+        console.error('Full output:', output);
+        console.error('Full error:', errorOutput);
+      }
     });
 
     try {
-      // Wait for dashboard to be ready
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait for dashboard to be ready - check if it's mentioned in output
+      const dashboardStartTime = Date.now();
+      while (Date.now() - dashboardStartTime < 10000) { // 10 second timeout
+        if (output.includes('Dazzle running at http://localhost:8888') || 
+            output.includes('Dashboard connected')) {
+          console.log('Dashboard detected in output, waiting for it to be ready...');
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Give it time to fully start
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
       // Navigate to dashboard
       await page.goto('http://localhost:8888');
@@ -130,7 +155,10 @@ test.describe.serial('Grimes Genesis E2E Test', () => {
       'Genesis',
       '--record-output', audioOutputFile
     ], {
-      env: { ...process.env },
+      env: { 
+        ...process.env,
+        PATH: `${path.join(path.dirname(__dirname), 'venv', 'bin')}:${process.env.PATH}`
+      },
       cwd: path.dirname(__dirname)
     });
 
@@ -139,13 +167,33 @@ test.describe.serial('Grimes Genesis E2E Test', () => {
       output += data.toString();
     });
 
+    let errorOutput = '';
     strudelProcess.stderr.on('data', (data) => {
-      console.error('Error:', data.toString());
+      const error = data.toString();
+      errorOutput += error;
+      console.error('Error:', error);
+    });
+    
+    strudelProcess.on('exit', (code) => {
+      if (code !== 0) {
+        console.error(`Process exited with code ${code}`);
+        console.error('Full output:', output);
+        console.error('Full error:', errorOutput);
+      }
     });
 
     try {
-      // Wait for dashboard to be ready
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait for dashboard to be ready - check if it's mentioned in output
+      const dashboardStartTime = Date.now();
+      while (Date.now() - dashboardStartTime < 10000) { // 10 second timeout
+        if (output.includes('Dazzle running at http://localhost:8888') || 
+            output.includes('Dashboard connected')) {
+          console.log('Dashboard detected in output, waiting for it to be ready...');
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Give it time to fully start
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
       // Navigate to dashboard
       await page.goto('http://localhost:8888');
