@@ -29,6 +29,7 @@ export class Dazzle {
     this.pattern = null;
     this.isRecording = false;
     this.recordOutput = options.recordOutput;
+    this.autoRecording = true; // Always record for analysis
     this.lastError = null;
     this.recordProcess = null;
     this.audioFilename = null;
@@ -45,11 +46,13 @@ export class Dazzle {
     };
     this.audioData = null;
     this.sampleServer = null;
+    this.currentMode = null; // Will progress through: gestalt -> kaizen -> surgery
   }
 
   async start() {
-    // Create recordings directory
+    // Create recordings directory and archive directory
     await fs.mkdir('./recordings', { recursive: true });
+    await fs.mkdir('./recordings/archive', { recursive: true });
 
     // Start web server
     await this.startServer();
@@ -123,20 +126,10 @@ export class Dazzle {
             // Broadcast error to dashboard
             this.broadcast({ type: 'error', data: text });
             
-            // First try to fix by removing last )
-            // Only do this if the error mentions a parenthesis issue
-            if (text.includes('Unexpected token') && (text.includes(')') || text.includes('paren'))) {
-              console.log(chalk.yellow('\n🔧 Trying to fix by removing trailing )...'));
-              
-              // Try to fix it in the editor
-              this.tryRemoveTrailingParen();
-            } else if (this.retryCount < this.maxRetries && this.currentArtist && this.currentSong) {
-              // Otherwise retry with error feedback
-              console.log(chalk.yellow(`\n🔄 Retrying with error feedback (attempt ${this.retryCount + 1}/${this.maxRetries})...`));
-              setTimeout(() => {
-                this.retryWithErrorFeedback();
-              }, 2000);
-            }
+            // No automatic fixes - fail fast
+            console.log(chalk.red('\n❌ Pattern generation failed due to syntax errors'));
+            console.log(chalk.red('Manual intervention required to fix the pattern'));
+            // Don't throw here as it's in browser context, but stop processing
           }
         }
       });
@@ -177,15 +170,42 @@ export class Dazzle {
     if (audioFile && this.audioAnalysis.enabled) {
       console.log(chalk.gray(`Audio file: ${audioFile}`));
       
-      // Check if ML analysis exists
-      const mlAnalysisFile = `${audioFile}.fancy_analysis.json`;
-      if (existsSync(mlAnalysisFile)) {
-        try {
-          mlAnalysis = JSON.parse(await fs.readFile(mlAnalysisFile, 'utf8'));
-          console.log(chalk.magenta('\n🎩 Using fancy ML analysis'));
-        } catch (e) {
-          console.log(chalk.gray('ML analysis file exists but could not be loaded'));
+      // ML analysis is required - no fallbacks
+      console.log(chalk.magenta('\n🎩 Running ML analysis...'));
+      try {
+        mlAnalysis = await analyzeWithML(audioFile, { fancy: true });
+        if (!mlAnalysis) {
+          throw new Error('ML analysis returned no results');
         }
+        
+        console.log(chalk.green('✓ ML analysis complete'));
+        
+        // Use ML-detected tempo if available
+        if (mlAnalysis.analyses?.advanced_features?.success) {
+          const mlBpm = mlAnalysis.analyses.advanced_features.tempo;
+          if (mlBpm) {
+            console.log(chalk.blue(`Using ML-detected BPM: ${mlBpm}`));
+            bpm = Math.round(mlBpm);
+          }
+        }
+        
+        // Show what ML features are available
+        if (mlAnalysis.analyses?.source_separation?.success) {
+          console.log(chalk.green('✓ Source separation: drums, bass, vocals, other'));
+        }
+        if (mlAnalysis.analyses?.transcription?.success) {
+          console.log(chalk.green(`✓ MIDI transcription: ${mlAnalysis.analyses.transcription.note_count} notes`));
+        }
+        if (mlAnalysis.analyses?.advanced_features?.success) {
+          const key = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][mlAnalysis.analyses.advanced_features.estimated_key];
+          console.log(chalk.green(`✓ Key detection: ${key}`));
+        }
+      } catch (error) {
+        console.log(chalk.red(`\n❌ ML analysis failed: ${error.message}`));
+        console.log(chalk.yellow('\nML analysis is required for realistic music generation.'));
+        console.log(chalk.yellow('Please ensure ML dependencies are installed:'));
+        console.log(chalk.cyan('  npm run setup:ml'));
+        throw error; // Re-throw to stop execution
       }
       
       try {
@@ -241,9 +261,8 @@ export class Dazzle {
       });
     }
     
-    // Load prompt template - use ML template if we have ML analysis
-    const templateFile = mlAnalysis ? 'pattern-prompt-ml.txt' : 
-      (fullAnalysis ? 'pattern-prompt-comprehensive.txt' : 'pattern-prompt.txt');
+    // Load prompt template - use enhanced template for better music theory
+    const templateFile = mlAnalysis ? 'pattern-prompt-ml.txt' : 'pattern-prompt-enhanced.txt';
     const promptTemplate = await fs.readFile(
       join(__dirname, 'templates', templateFile), 
       'utf-8'
@@ -268,14 +287,14 @@ export class Dazzle {
       if (mlAnalysis.analyses?.source_separation?.success) {
         mlInfo += '\n**Source Separation (stems available):**\n';
         const stems = mlAnalysis.analyses.source_separation.stems;
-        Object.entries(stems).forEach(([stem, path]) => {
+        Object.entries(stems).forEach(([stem, _path]) => {
           mlInfo += `- ${stem}: Available as separated audio\n`;
         });
       }
       
       if (mlAnalysis.analyses?.transcription?.success) {
         const trans = mlAnalysis.analyses.transcription;
-        mlInfo += `\n**MIDI Transcription:**\n`;
+        mlInfo += '\n**MIDI Transcription:**\n';
         mlInfo += `- ${trans.note_count} notes detected\n`;
         mlInfo += `- MIDI file: ${trans.midi_file}\n`;
         if (trans.first_notes && trans.first_notes.length > 0) {
@@ -285,7 +304,7 @@ export class Dazzle {
       
       if (mlAnalysis.analyses?.advanced_features?.success) {
         const feat = mlAnalysis.analyses.advanced_features;
-        mlInfo += `\n**Advanced Features:**\n`;
+        mlInfo += '\n**Advanced Features:**\n';
         mlInfo += `- ML-detected tempo: ${feat.tempo} BPM\n`;
         mlInfo += `- Estimated key: ${['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][feat.estimated_key]}\n`;
         mlInfo += `- ${feat.section_count} sections detected\n`;
@@ -300,7 +319,8 @@ export class Dazzle {
       .replace(/{{lyricsHint}}/g, lyricsHint)
       .replace(/{{sampleInfo}}/g, sampleInfo)
       .replace(/{{mlInfo}}/g, mlInfo || '')
-      .replace(/{{fullAnalysis}}/g, JSON.stringify(fullAnalysis || {}, null, 2));
+      .replace(/{{fullAnalysis}}/g, JSON.stringify(fullAnalysis || {}, null, 2))
+      .replace(/{{bpm}}/g, bpm);
     
     // Add error feedback if retrying
     if (errorFeedback) {
@@ -373,12 +393,15 @@ export class Dazzle {
       
     } catch (error) {
       console.error(chalk.red('Claude Error:'), error.message);
-      // Fallback to a simple pattern
-      console.log(chalk.yellow('Falling back to fallback pattern...'));
-      this.pattern = this.getFallbackPattern(song, artist);
+      throw new Error(`Pattern generation failed: ${error.message}`);
     }
     
-    console.log(chalk.green('✓ Pattern generated'));
+    console.log(chalk.green('✓ Initial pattern generated'));
+    
+    // Validate and fix syntax errors
+    console.log(chalk.yellow('\n🔧 Validating pattern syntax...'));
+    this.pattern = await this.validatePattern(this.pattern);
+    
     console.log(chalk.cyan('\n📝 Generated pattern:'));
     console.log(chalk.gray('─'.repeat(50)));
     // Don't truncate - show full pattern
@@ -392,13 +415,22 @@ export class Dazzle {
     // Write pattern to file for debugging
     await fs.writeFile('last-pattern.js', this.pattern);
     console.log(chalk.gray('Pattern written to last-pattern.js for inspection'));
-    console.log(chalk.blue('\n🔍 Pattern details for comparison:'));
-    console.log(chalk.gray(`- Total length: ${this.pattern.length} characters`));
-    console.log(chalk.gray(`- First 100 chars: "${this.pattern.slice(0, 100)}..."`));
-    console.log(chalk.gray(`- Last 100 chars: "...${this.pattern.slice(-100)}"`));
+    
+    // Store song structure for multi-pass refinement
+    this.songStructure = songStructure;
+    this.songBpm = bpm;
+    this.mlData = mlAnalysis;
     
     // Wait a bit then try autoplay
     setTimeout(() => this.autoplay(), 3000);
+    
+    // Start multi-pass refinement process
+    if (!errorFeedback) {
+      setTimeout(() => {
+        console.log(chalk.blue('\n🎭 Starting Multi-Pass Refinement Process...'));
+        this.startMultiPassRefinement();
+      }, 10000); // Start after 10 seconds
+    }
     
     // Log message about recording
     if (this.recordOutput) {
@@ -459,6 +491,402 @@ Return ONLY the corrected Strudel code, no explanations.`;
     } catch (error) {
       console.error(chalk.red('Validation Error:'), error.message);
       return pattern; // Return original if validation fails
+    }
+  }
+
+  async startMultiPassRefinement() {
+    if (!this.songStructure || !this.pattern) {
+      console.log(chalk.yellow('Cannot start refinement - missing song data'));
+      return;
+    }
+
+    console.log(chalk.blue('\n🎭 MULTI-PASS REFINEMENT PROCESS'));
+    console.log(chalk.gray('Phase 1: Gestalt (Whole Song) → Phase 2: Kaizen (Sections) → Phase 3: Surgery (Details)'));
+
+    // Phase 1: Gestalt Mode
+    await this.gestaltMode();
+    
+    // Phase 2: Kaizen Mode (automatically starts after Gestalt)
+    // Phase 3: Surgery Mode (automatically starts after Kaizen)
+  }
+
+  getModeDescription(mode) {
+    const descriptions = {
+      gestalt: '🌍 Gestalt Mode: Analyzing and refining the whole song structure',
+      kaizen: '📈 Kaizen Mode: Continuous improvement, one section at a time',
+      surgery: '🔬 Surgery Mode: Precise tweaks to specific measures'
+    };
+    return descriptions[mode] || mode;
+  }
+
+  async gestaltMode() {
+    console.log(chalk.blue('\n🌍 PHASE 1: GESTALT MODE - Whole Song Analysis'));
+    this.currentMode = 'gestalt';
+    
+    // Update visualization
+    this.broadcast({ 
+      type: 'modeChange', 
+      mode: 'gestalt',
+      phase: 1,
+      description: '🌍 Analyzing whole song structure and flow'
+    });
+    
+    console.log(chalk.gray('Analyzing song cohesion, transitions, and overall energy arc...'));
+    
+    const gestaltPrompt = `You are in GESTALT mode - analyzing the entire song structure holistically.
+
+Current pattern:
+${this.pattern}
+
+Song: "${this.currentSong}" by ${this.currentArtist}
+BPM: ${this.songBpm}
+
+Analyze and improve:
+1. Overall energy arc and dynamics
+2. Transitions between sections
+3. Thematic consistency
+4. Balance between repetition and variation
+5. Climax placement and build-up
+
+Make the pattern more cohesive while maintaining the original song's character.
+Return the COMPLETE improved pattern. ONLY Strudel code.`;
+
+    try {
+      const response = await this.anthropic.messages.create({
+        model: 'claude-opus-4-20250514',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: gestaltPrompt }]
+      });
+      
+      this.pattern = this.extractCode(response.content[0].text);
+      console.log(chalk.green('✓ Gestalt analysis complete - whole song structure optimized'));
+      
+      await this.updateVisualization('gestalt', {
+        status: 'complete',
+        improvements: ['Energy arc balanced', 'Transitions smoothed', 'Theme unified']
+      });
+      await this.updatePatternInBrowser();
+      
+    } catch (error) {
+      console.error(chalk.red('Gestalt mode error:'), error.message);
+    }
+    
+    // Wait before transitioning to Kaizen mode
+    console.log(chalk.gray('\nLetting the improved structure play for 20 seconds...'));
+    await new Promise(resolve => setTimeout(resolve, 20000));
+    
+    // Transition to Kaizen mode
+    await this.kaizenMode();
+  }
+
+  async kaizenMode() {
+    console.log(chalk.blue('\n📈 PHASE 2: KAIZEN MODE - Section-by-Section Improvement'));
+    this.currentMode = 'kaizen';
+    
+    // Update visualization
+    this.broadcast({ 
+      type: 'modeChange', 
+      mode: 'kaizen',
+      phase: 2,
+      description: '📈 Improving each section individually'
+    });
+    
+    const sections = ['intro', 'verse', 'chorus', 'bridge', 'outro'];
+    const availableSections = sections.filter(s => this.songStructure[s]);
+    
+    console.log(chalk.gray(`Sections to improve: ${availableSections.join(' → ')}`));
+    
+    // Create Kanban-style visualization
+    const kanban = {
+      todo: [...availableSections],
+      inProgress: [],
+      done: []
+    };
+    
+    await this.updateVisualization('kaizen', { kanban, status: 'starting' });
+    
+    for (let i = 0; i < availableSections.length; i++) {
+      const section = availableSections[i];
+      
+      // Update Kanban
+      kanban.todo = kanban.todo.filter(s => s !== section);
+      kanban.inProgress = [section];
+      await this.updateVisualization('kaizen', { 
+        kanban, 
+        currentSection: section,
+        progress: `${i + 1}/${availableSections.length}`
+      });
+      
+      await this.refineSection(section);
+      
+      // Mark as done
+      kanban.inProgress = [];
+      kanban.done.push(section);
+      await this.updateVisualization('kaizen', { 
+        kanban, 
+        completedSection: section 
+      });
+      
+      // Shorter wait between sections since user can hear improvements building up
+      if (i < availableSections.length - 1) {
+        console.log(chalk.gray(`Next section in 10 seconds...`));
+        await new Promise(resolve => setTimeout(resolve, 10000));
+      }
+    }
+    
+    console.log(chalk.green('\n✨ Kaizen phase complete - all sections improved!'));
+    
+    // Wait before surgery mode
+    console.log(chalk.gray('\nLetting the refined sections play for 15 seconds...'));
+    await new Promise(resolve => setTimeout(resolve, 15000));
+    
+    // Automatically transition to surgery mode
+    await this.surgeryMode();
+  }
+
+  async surgeryMode() {
+    console.log(chalk.blue('\n🔬 PHASE 3: SURGERY MODE - Precision Details'));
+    this.currentMode = 'surgery';
+    
+    // Update visualization
+    this.broadcast({ 
+      type: 'modeChange', 
+      mode: 'surgery',
+      phase: 3,
+      description: '🔬 Fine-tuning specific details and transitions'
+    });
+    
+    console.log(chalk.gray('Identifying areas for surgical precision...'));
+    
+    // Automatically identify problem areas based on pattern analysis
+    const surgeryTargets = this.identifySurgeryTargets();
+    
+    console.log(chalk.gray(`Identified ${surgeryTargets.length} areas for improvement`));
+    
+    // Show surgical targets
+    await this.updateVisualization('surgery', {
+      targets: surgeryTargets,
+      status: 'analyzing'
+    });
+    
+    for (let i = 0; i < surgeryTargets.length; i++) {
+      const target = surgeryTargets[i];
+      console.log(chalk.yellow(`\n🔬 Surgery ${i + 1}/${surgeryTargets.length}: ${target.description}`));
+      console.log(chalk.gray(`Target: ${target.location}`));
+      
+      await this.updateVisualization('surgery', {
+        currentTarget: target,
+        progress: `${i + 1}/${surgeryTargets.length}`,
+        status: 'operating'
+      });
+      
+      const surgeryPrompt = `You are in SURGERY mode - making precise tweaks to a specific part of the pattern.
+
+Current pattern:
+${this.pattern}
+
+Target: ${target.location}
+Task: ${target.description}
+Type: ${target.type}
+
+Focus ONLY on improving this specific area with surgical precision.
+Keep everything else EXACTLY the same.
+
+Return the COMPLETE pattern with your precise improvements. ONLY Strudel code.`;
+
+      try {
+        const response = await this.anthropic.messages.create({
+          model: 'claude-opus-4-20250514',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: surgeryPrompt }]
+        });
+        
+        this.pattern = this.extractCode(response.content[0].text);
+        console.log(chalk.green(`✓ Surgery complete: ${target.description}`));
+        
+        await this.updateVisualization('surgery', {
+          completedTarget: target,
+          status: 'success'
+        });
+        
+        await this.updatePatternInBrowser();
+        
+      } catch (error) {
+        console.error(chalk.red(`Surgery error:`, error.message));
+      }
+      
+      // Shorter wait for surgery mode
+      if (i < surgeryTargets.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 6000));
+      }
+    }
+    
+    console.log(chalk.green('\n✨ All three phases complete!'));
+    console.log(chalk.blue('\n🎉 MULTI-PASS REFINEMENT FINISHED'));
+    console.log(chalk.gray('Your pattern has been refined through:'));
+    console.log(chalk.gray('  1. Gestalt - Whole song structure'));
+    console.log(chalk.gray('  2. Kaizen - Individual sections'));
+    console.log(chalk.gray('  3. Surgery - Precise details'));
+    
+    await this.updateVisualization('complete', {
+      message: 'Multi-pass refinement complete!',
+      phases: ['Gestalt ✓', 'Kaizen ✓', 'Surgery ✓']
+    });
+  }
+
+  identifySurgeryTargets() {
+    // Analyze pattern to find areas needing surgical precision
+    const targets = [];
+    
+    // Always improve key transitions
+    if (this.songStructure.verse && this.songStructure.chorus) {
+      targets.push({
+        type: 'transition',
+        location: 'Verse to Chorus transition',
+        description: 'Smooth the energy build from verse to chorus'
+      });
+    }
+    
+    // Add drum fills before choruses
+    targets.push({
+      type: 'drums',
+      location: '1 measure before each chorus',
+      description: 'Add dynamic drum fills to signal chorus arrival'
+    });
+    
+    // Improve intro hook
+    if (this.songStructure.intro) {
+      targets.push({
+        type: 'hook',
+        location: 'First 4 measures of intro',
+        description: 'Create memorable opening hook'
+      });
+    }
+    
+    // Add melodic variation
+    targets.push({
+      type: 'melody',
+      location: 'Second half of chorus',
+      description: 'Add melodic variation and flourishes'
+    });
+    
+    // Enhance outro
+    if (this.songStructure.outro) {
+      targets.push({
+        type: 'effects',
+        location: 'Final 8 measures',
+        description: 'Add fadeout effects and final statement'
+      });
+    }
+    
+    return targets;
+  }
+
+  async updateVisualization(mode, data) {
+    this.broadcast({
+      type: 'visualizationUpdate',
+      mode: mode,
+      data: data,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  async refineSection(sectionName) {
+    console.log(chalk.blue(`\n🔧 Refining ${sectionName}...`));
+    
+    const sectionData = this.songStructure[sectionName];
+    
+    // Create a focused prompt for this section
+    let refinementPrompt = `You are refining the ${sectionName} section of a Strudel pattern.
+
+Current full pattern:
+${this.pattern}
+
+Section details:
+- Name: ${sectionName}
+- Start: ${sectionData.start} seconds
+- Duration: ${sectionData.duration} seconds
+- BPM: ${this.songBpm}
+
+Please improve ONLY the ${sectionName} section by:
+1. Adding more musical variety and interest
+2. Ensuring smooth transitions in and out
+3. Using appropriate energy level for a ${sectionName}
+4. Adding subtle effects and automation
+5. Making it more characteristic of the original song style`;
+
+    // Add ML data if available
+    if (this.mlData?.analyses?.transcription?.success) {
+      refinementPrompt += `\n\nML Analysis available:
+- Detected notes in this section (use these for accuracy)
+- Transcribed MIDI available`;
+    }
+
+    if (this.mlData?.analyses?.advanced_features?.success) {
+      const key = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][this.mlData.analyses.advanced_features.estimated_key];
+      refinementPrompt += `\n- Detected key: ${key} (use appropriate scales)`;
+    }
+
+    refinementPrompt += `\n\nReturn the ENTIRE pattern with the improved ${sectionName} section. The rest should remain unchanged.
+Return ONLY Strudel code, no explanations.`;
+
+    try {
+      const response = await this.anthropic.messages.create({
+        model: 'claude-opus-4-20250514',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: refinementPrompt }]
+      });
+      
+      const refinedPattern = this.extractCode(response.content[0].text);
+      
+      // Update the pattern
+      this.pattern = refinedPattern;
+      
+      console.log(chalk.green(`✓ ${sectionName} section refined`));
+      
+      // Send updated pattern to dashboard
+      this.broadcast({ 
+        type: 'patternUpdate', 
+        data: this.pattern,
+        section: sectionName,
+        message: `Refined ${sectionName} section`
+      });
+      
+      // Write to file
+      await fs.writeFile('last-pattern.js', this.pattern);
+      
+      // Update in the browser
+      await this.updatePatternInBrowser();
+      
+    } catch (error) {
+      console.error(chalk.red(`Failed to refine ${sectionName}:`), error.message);
+    }
+  }
+
+  async updatePatternInBrowser() {
+    if (!this.page) return;
+    
+    try {
+      const frame = this.page.frames().find(f => f.url().includes('strudel.cc'));
+      if (!frame) return;
+      
+      const editor = await frame.$('.cm-content');
+      if (editor) {
+        // Clear and set new pattern
+        await editor.click();
+        const selectAllKey = process.platform === 'darwin' ? 'Meta+A' : 'Control+A';
+        await this.page.keyboard.press(selectAllKey);
+        await this.page.keyboard.press('Delete');
+        await editor.fill(this.pattern);
+        
+        // Evaluate
+        const evalKey = process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter';
+        await this.page.keyboard.press(evalKey);
+        
+        console.log(chalk.gray('Pattern updated in browser'));
+      }
+    } catch (error) {
+      console.log(chalk.yellow('Could not update pattern in browser:', error.message));
     }
   }
 
@@ -544,12 +972,10 @@ stack(
           await playButton.click();
           console.log(chalk.green('✅ Autoplay successful after fix!'));
           
-          // Start recording after autoplay
+          // Always start recording after autoplay
           setTimeout(() => {
             this.broadcast({ type: 'autoplayStarted' });
-            if (this.recordOutput) {
-              this.startRecording();
-            }
+            this.startRecording();
           }, 1000);
         } else {
           // Try spacebar as fallback
@@ -654,12 +1080,10 @@ stack(
         await playButton.click();
         console.log(chalk.green('✅ Autoplay successful!'));
         
-        // Start recording after autoplay
+        // Always start recording after autoplay
         setTimeout(() => {
           this.broadcast({ type: 'autoplayStarted' });
-          if (this.recordOutput) {
-            this.startRecording();
-          }
+          this.startRecording();
         }, 1000);
       } else {
         // Try spacebar as fallback
@@ -677,11 +1101,20 @@ stack(
     this.isRecording = true;
     this.recordingStartTime = Date.now();
     
-    // Generate filename with timestamp
+    // Generate filename with timestamp for archive
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const safeSong = this.currentSong.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const safeArtist = this.currentArtist.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    this.audioFilename = this.recordOutput || `strudelcover_${safeArtist}_${safeSong}_${timestamp}.wav`;
+    
+    // If user specified output, use that AND create archive copy
+    if (this.recordOutput) {
+      this.audioFilename = this.recordOutput;
+      this.archiveFilename = `./recordings/archive/strudelcover_${safeArtist}_${safeSong}_${timestamp}.wav`;
+    } else {
+      // Otherwise save to recordings directory
+      this.audioFilename = `./recordings/strudelcover_${safeArtist}_${safeSong}_${timestamp}.wav`;
+      this.archiveFilename = null;
+    }
     
     // Start audio recording using system audio capture
     await this.startAudioCapture();
@@ -713,6 +1146,17 @@ stack(
     await this.stopAudioCapture();
     
     console.log(chalk.green(`💾 Audio saved to: ${this.audioFilename}`));
+    
+    // Copy to archive if needed
+    if (this.archiveFilename && this.audioFilename !== this.archiveFilename) {
+      try {
+        await fs.copyFile(this.audioFilename, this.archiveFilename);
+        console.log(chalk.gray(`📁 Archive copy: ${this.archiveFilename}`));
+      } catch (error) {
+        console.log(chalk.yellow('Could not create archive copy:', error.message));
+      }
+    }
+    
     this.broadcast({ 
       type: 'recordingStopped',
       filename: this.audioFilename,

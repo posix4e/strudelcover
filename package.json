@@ -14,9 +14,8 @@
     "analyze": "./scripts/analyze-with-aubio.sh",
     "analyze:ml": "source venv/bin/activate && python scripts/analyze-with-ml.py",
     "analyze:full": "./scripts/analyze-comprehensive.sh",
-    "setup:ml": "./scripts/setup-ml-env.sh",
-    "lint": "eslint src/**/*.js",
-    "lint:fix": "eslint src/**/*.js --fix"
+    "lint": "eslint 'src/**/*.js'",
+    "lint:fix": "eslint 'src/**/*.js' --fix"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.9",

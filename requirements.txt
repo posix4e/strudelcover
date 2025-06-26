@@ -1,25 +1,16 @@
 # Core ML packages for audio analysis
-torch>=2.0.0
-torchaudio>=2.0.0
-transformers>=4.35.0
-audiocraft>=1.0.0
-demucs>=4.0.0
-basic-pitch>=0.3.0
+torch>=2.5.0
+torchaudio>=2.5.0
+demucs>=4.0.1
+basic-pitch>=0.3.5
 
-# Additional audio processing
-librosa>=0.10.0
-soundfile>=0.12.0
-scipy>=1.11.0
-numpy<2.0.0  # Keep numpy < 2.0 for compatibility
+# Audio processing
+librosa>=0.10.2
 
-# Utils
-tqdm>=4.65.0
-pydub>=0.25.0
-essentia>=2.1b6.dev1105  # Optional, for advanced analysis
+# MIDI and utilities
 pretty-midi>=0.2.10
-mir-eval>=0.7
+tqdm>=4.66.0
 
-# For MusicGen/AudioCraft
-xformers>=0.0.22  # Optional, for faster inference
-einops>=0.7.0
-hydra-core>=1.3.0
+# Optional advanced features (can be commented out if not needed)
+# transformers>=4.40.0  # For Wav2Vec2 embeddings
+# audiocraft>=1.3.0     # For MusicGen embeddings

@@ -1,0 +1,84 @@
+{
+  "audio_file": "gg.mp3",
+  "fancy_mode": true,
+  "analyses": {
+    "source_separation": {
+      "success": false,
+      "error": "No module named 'demucs.api'"
+    },
+    "transcription": {
+      "success": true,
+      "midi_file": "gg.mid",
+      "note_count": 2373,
+      "first_notes": [
+        {
+          "pitch": 326,
+          "start": 327.07786122448977,
+          "duration": -262.07786122448977
+        },
+        {
+          "pitch": 326,
+          "start": 326.8804916099773,
+          "duration": -261.8804916099773
+        },
+        {
+          "pitch": 326,
+          "start": 326.7411718820861,
+          "duration": -261.7411718820861
+        },
+        {
+          "pitch": 325,
+          "start": 326.0561832199546,
+          "duration": -261.0561832199546
+        },
+        {
+          "pitch": 325,
+          "start": 325.8355936507936,
+          "duration": -260.8355936507936
+        },
+        {
+          "pitch": 325,
+          "start": 325.6253301587302,
+          "duration": -260.6253301587302
+        },
+        {
+          "pitch": 325,
+          "start": 325.30025079365083,
+          "duration": -260.30025079365083
+        },
+        {
+          "pitch": 324,
+          "start": 325.03322131519275,
+          "duration": -260.03322131519275
+        },
+        {
+          "pitch": 324,
+          "start": 325.50923038548757,
+          "duration": -271.50923038548757
+        },
+        {
+          "pitch": 323,
+          "start": 324.7081419501134,
+          "duration": -270.7081419501134
+        }
+      ]
+    },
+    "advanced_features": {
+      "success": true,
+      "tempo": 83.35433467741936,
+      "estimated_key": 6,
+      "key_confidence": 0.5462665557861328,
+      "section_boundaries": [
+        0.0,
+        6.757006802721088,
+        61.18458049886621,
+        71.95863945578232,
+        104.65233560090702,
+        134.8150566893424,
+        263.8947845804989,
+        323.5700680272109
+      ],
+      "section_count": 8
+    }
+  }
+}

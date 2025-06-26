@@ -1,0 +1,18 @@
+{
+  "audio_file": "/Users/alexnewman/strudelcover/test/genesis.mp3",
+  "fancy_mode": true,
+  "analyses": {
+    "source_separation": {
+      "success": false,
+      "error": "No module named 'demucs.api'"
+    },
+    "transcription": {
+      "success": false,
+      "error": ""
+    },
+    "advanced_features": {
+      "success": false,
+      "error": ""
+    }
+  }
+}

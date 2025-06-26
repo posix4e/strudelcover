@@ -1,0 +1,86 @@
+You are creating a Strudel pattern for "{{song}}" by {{artist}} with advanced musical knowledge.
+
+{{songStructure}}
+
+{{lyricsHint}}
+
+{{sampleInfo}}
+
+{{mlInfo}}
+
+MUSIC THEORY REQUIREMENTS:
+
+1. **Harmonic Structure**:
+   - Use chord progressions that match the genre
+   - Common progressions: I-V-vi-IV, ii-V-I, I-vi-IV-V, vi-IV-I-V
+   - Add extensions (7ths, 9ths) for jazz/soul influence
+   - Use inversions for smooth voice leading
+
+2. **Rhythm Patterns**:
+   - Four-on-floor: s("bd*4")
+   - Syncopated: s("bd ~ bd [~ bd] bd ~")
+   - Trap hi-hats: s("hh*16").gain("0.7 0.4 0.6 0.3".fast(4))
+   - Breakbeat: s("[bd sd] [bd sd:2]")
+   - Shuffle/swing: add .swing(0.1) to patterns
+
+3. **Melodic Construction**:
+   - Use scale degrees that fit the key
+   - Add passing tones and chromatic approaches
+   - Create call-and-response patterns
+   - Use octave jumps for emphasis
+
+4. **Dynamic Automation**:
+   - Volume swells: .gain(sine.range(0.3, 0.9).slow(4))
+   - Filter sweeps: .cutoff(saw.range(500, 4000).slow(8))
+   - Panning movement: .pan(sine.slow(3))
+   - Reverb automation: .room(square.range(0.1, 0.7).slow(16))
+
+5. **Song Structure Elements**:
+   - Intro: Build tension with filtered elements
+   - Verse: Establish groove, leave space for vocals
+   - Pre-chorus: Add energy with rising elements
+   - Chorus: Full frequency spectrum, maximum energy
+   - Bridge: Harmonic variation, different rhythm
+   - Outro: Gradual reduction, echo effects
+
+STRUDEL PATTERN REQUIREMENTS:
+
+- Use setcps({{bpm}}/60/4) for tempo
+- Layer with stack() for vertical complexity
+- Sequence with cat() for horizontal progression
+- Use struct() for repeating patterns with variations
+- Apply .slow() and .fast() for time manipulation
+- Use .sometimes() and .rarely() for variation
+- Chain effects: .gain().room().delay().pan()
+
+ADVANCED TECHNIQUES:
+
+```javascript
+// Sidechain compression effect
+.gain("1 0.3".fast(4))
+
+// Polyrhythms
+stack(
+  s("bd*3"),
+  s("hh*4"),
+  s("sd*5").slow(2)
+)
+
+// Euclidean rhythms with rotation
+s("bd(5,8,2)") // 5 hits in 8 steps, rotated by 2
+
+// Chord voicings
+note("<C3 E3 G3 B3> <F3 A3 C4 E4>").struct("x ~ x ~")
+
+// Humanization
+.nudge(rand.range(-0.01, 0.01))
+```
+
+Create a complete 100-200 line Strudel pattern that:
+1. Captures the essence of the original song
+2. Uses music theory appropriately
+3. Includes all song sections with smooth transitions
+4. Incorporates dynamic automation throughout
+5. Shows musical sophistication while remaining playable
+
+Return ONLY the Strudel code starting with setcps().

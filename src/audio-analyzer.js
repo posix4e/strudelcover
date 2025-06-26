@@ -54,8 +54,8 @@ export class AudioAnalyzer {
       }
       
     } catch (error) {
-      console.log(chalk.yellow(`⚠️  Audio analysis partially failed: ${error.message}`));
-      console.log(chalk.gray('Continuing with estimated values...'));
+      console.error(chalk.red(`❌ Audio analysis failed: ${error.message}`));
+      throw error;
     }
     
     return results;
@@ -82,8 +82,7 @@ export class AudioAnalyzer {
         sampleRate: info.streams[0]?.sample_rate
       };
     } catch (error) {
-      console.log(chalk.yellow('Failed to get audio info:', error.message));
-      return { duration: 180, format: 'unknown' }; // Default 3 minutes
+      throw new Error(`Failed to get audio info: ${error.message}`);
     }
   }
 
@@ -129,11 +128,8 @@ export class AudioAnalyzer {
         return Math.max(60, Math.min(200, estimatedBPM));
       }
     } catch (error) {
-      console.log(chalk.gray('BPM detection failed, using default'));
+      throw new Error(`BPM detection failed: ${error.message}`);
     }
-    
-    // Default BPM
-    return 120;
   }
 
   async extractSamples(audioFile, artist, song) {
@@ -166,7 +162,7 @@ export class AudioAnalyzer {
             duration: moment.duration
           });
         } catch (error) {
-          console.log(chalk.gray(`Failed to extract ${moment.name} sample`));
+          throw new Error(`Failed to extract ${moment.name} sample: ${error.message}`);
         }
       }
       
@@ -174,7 +170,7 @@ export class AudioAnalyzer {
       await this.extractPercussiveSamples(audioFile, sampleDir, samples);
       
     } catch (error) {
-      console.log(chalk.yellow('Sample extraction partially failed:', error.message));
+      throw new Error(`Sample extraction failed: ${error.message}`);
     }
     
     return samples;
@@ -209,7 +205,7 @@ export class AudioAnalyzer {
       await fs.unlink(drumsFile).catch(() => {});
       
     } catch (error) {
-      console.log(chalk.gray('Percussive sample extraction skipped'));
+      throw new Error(`Percussive sample extraction failed: ${error.message}`);
     }
   }
 
@@ -265,15 +261,12 @@ export class AudioAnalyzer {
       }
       
     } catch (error) {
-      console.log(chalk.gray('Structure detection simplified'));
+      throw new Error(`Structure detection failed: ${error.message}`);
     }
     
-    // Fallback structure
+    // No fallback - if we couldn't detect structure, fail
     if (Object.keys(structure).length === 0) {
-      structure.intro = { start: 0, end: 15 };
-      structure.verse = { start: 15, end: 45 };
-      structure.chorus = { start: 45, end: 75 };
-      structure.outro = { start: duration - 20, end: duration };
+      throw new Error('Could not detect song structure from audio');
     }
     
     return structure;
